@@ -5,6 +5,7 @@ dist/
 !.env.example
 *.db
 *.db-journal
+*.log
 .gantry/
 .worktrees/
 .agent-runs/

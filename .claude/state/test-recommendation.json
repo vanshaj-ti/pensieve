@@ -1,0 +1,7 @@
+{
+  "timestamp": "2026-07-15T12:47:51Z",
+  "changed_file": "/Users/vanshaj/gantry/gantry/git.py",
+  "test_command": "npm test",
+  "related_test": "",
+  "recommendation": "テストの実行を推奨します"
+}
