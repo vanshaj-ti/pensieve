@@ -1,0 +1,58 @@
+# gantry.toml — Gantry pipeline configuration for Pensieve
+# Pipeline: plan -> build -> evidence -> review
+
+project_id = "pensieve"
+
+stages = ["plan", "build", "evidence", "review"]
+
+prompts_dir = ".gantry/prompts"
+
+[agent]
+runner = "claude-code"
+skip_permissions = true
+output_format = "json"
+
+[models.plan]
+model = ""
+max_turns = 40
+plan_mode = true
+
+[models.build]
+model = ""
+max_turns = 80
+
+[models.evidence]
+model = ""
+max_turns = 120
+
+[review]
+enabled = true
+runner = "claude-code"
+model = ""
+approve_keywords = ["APPROVE"]
+request_changes_keywords = ["REQUEST_CHANGES"]
+escalate_keywords = ["ESCALATE"]
+
+[git]
+base_branch = "main"
+
+[scope]
+forbid_paths = [".env", "**/*.pem", "**/secrets/**", "**/*.key"]
+enforce_plan_scope = true
+
+[checks]
+commands = ["npm run lint", "npm run build", "npm test"]
+timeout = 900
+
+[notify]
+backend = "none"
+
+[skills]
+enabled = []
+
+[mcp]
+enabled = []
+
+[herdr]
+enabled = true
+report_state = true
