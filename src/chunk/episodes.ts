@@ -1,5 +1,5 @@
-import type { ParsedLine } from '../ingest/parser.js';
 import type { Config } from '../config.js';
+import type { ParsedLine } from '../ingest/parser.js';
 
 export interface EpisodeDraft {
   date: string;
