@@ -436,5 +436,61 @@ describe('ingest', () => {
       expect(results[0].lines).toHaveLength(0);
       expect(results[0].maxLineNumber).toBe(4);
     });
+
+    it('projectFilter scopes to one project, excluding others', async () => {
+      const projectsDir = join(tempDir, '.claude', 'projects');
+      for (const proj of ['proj1', 'proj2']) {
+        mkdirSync(join(projectsDir, proj), { recursive: true });
+        writeFileSync(
+          join(projectsDir, proj, 'sess1.jsonl'),
+          JSON.stringify({ type: 'user', timestamp: '2026-01-01T00:00:00Z' }),
+        );
+      }
+
+      const db = openDb(dbPath);
+      const results = await scanNewLines(db, { claudeProjectsDir: projectsDir, projectFilter: 'proj1' });
+
+      expect(results).toHaveLength(1);
+      expect(results[0].projectDir).toBe('proj1');
+    });
+
+    it('sessionFilter scopes to one session within a project, excluding sibling sessions', async () => {
+      const projectsDir = join(tempDir, '.claude', 'projects');
+      mkdirSync(join(projectsDir, 'proj1'), { recursive: true });
+      for (const sess of ['sess1', 'sess2']) {
+        writeFileSync(
+          join(projectsDir, 'proj1', `${sess}.jsonl`),
+          JSON.stringify({ type: 'user', timestamp: '2026-01-01T00:00:00Z' }),
+        );
+      }
+
+      const db = openDb(dbPath);
+      const results = await scanNewLines(db, {
+        claudeProjectsDir: projectsDir,
+        projectFilter: 'proj1',
+        sessionFilter: 'sess1',
+      });
+
+      expect(results).toHaveLength(1);
+      expect(results[0].sessionId).toBe('sess1');
+    });
+
+    it('sessionFilter without a matching projectFilter matches nothing (scoped, not a global session search)', async () => {
+      const projectsDir = join(tempDir, '.claude', 'projects');
+      mkdirSync(join(projectsDir, 'proj1'), { recursive: true });
+      writeFileSync(
+        join(projectsDir, 'proj1', 'sess1.jsonl'),
+        JSON.stringify({ type: 'user', timestamp: '2026-01-01T00:00:00Z' }),
+      );
+
+      const db = openDb(dbPath);
+      const results = await scanNewLines(db, {
+        claudeProjectsDir: projectsDir,
+        projectFilter: 'proj2',
+        sessionFilter: 'sess1',
+      });
+
+      expect(results).toHaveLength(0);
+    });
   });
 });

@@ -15,6 +15,8 @@ export interface AnalyzeCommandOptions {
   force?: boolean;
   date?: string;
   dryRun?: boolean;
+  project?: string;
+  session?: string;
 }
 
 export async function runAnalyzeCommand(opts: AnalyzeCommandOptions): Promise<void> {
@@ -24,6 +26,8 @@ export async function runAnalyzeCommand(opts: AnalyzeCommandOptions): Promise<vo
     const result = await runDailyAnalysis({
       force: opts.force,
       dryRun: opts.dryRun,
+      projectFilter: opts.project,
+      sessionFilter: opts.session,
     });
 
     // Determine which dates to write briefs for
@@ -97,6 +101,8 @@ program
   .option('--force', 'Bypass cursor checks for backfill')
   .option('--date <YYYY-MM-DD>', 'Analyze/write brief for a specific past day')
   .option('--dry-run', 'Run extraction without persisting or advancing cursor')
+  .option('--project <projectDir>', 'Scope to one project (sanitized dir name under ~/.claude/projects/)')
+  .option('--session <sessionId>', 'Scope to one session within --project (filename minus .jsonl)')
   .action(async (opts: AnalyzeCommandOptions) => {
     await runAnalyzeCommand(opts);
   });

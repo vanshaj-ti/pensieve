@@ -15,6 +15,13 @@ export interface ScanResult {
 export interface ScanOptions {
   claudeProjectsDir?: string;
   force?: boolean;
+  /** Only scan sessions whose projectDir exactly matches this value.
+   * Scoping filter, not a search — used for debugging/backfill against one
+   * project instead of the full sweep across every Claude Code project. */
+  projectFilter?: string;
+  /** Only scan the session with this exact sessionId (filename minus .jsonl).
+   * Combine with projectFilter to scope to one specific session file. */
+  sessionFilter?: string;
 }
 
 export async function scanNewLines(
@@ -25,6 +32,12 @@ export async function scanNewLines(
   const results: ScanResult[] = [];
 
   for (const { projectDir, sessionId, filePath } of sessionFiles) {
+    if (options.projectFilter && projectDir !== options.projectFilter) {
+      continue;
+    }
+    if (options.sessionFilter && sessionId !== options.sessionFilter) {
+      continue;
+    }
     const lastRunAt = getLastRunAt(db, projectDir, sessionId);
 
     if (!options.force && !needsScan(filePath, lastRunAt)) {

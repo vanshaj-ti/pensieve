@@ -14,6 +14,10 @@ export interface PipelineOptions {
   claudeProjectsDir?: string;
   db?: Database.Database;
   client?: Anthropic;
+  /** Scope ingestion to one project (see ScanOptions.projectFilter). */
+  projectFilter?: string;
+  /** Scope ingestion to one session within projectFilter (see ScanOptions.sessionFilter). */
+  sessionFilter?: string;
 }
 
 export interface PipelineResult {
@@ -41,6 +45,8 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
   const scanResults = await scanNewLines(db, {
     claudeProjectsDir: options.claudeProjectsDir,
     force: options.force,
+    projectFilter: options.projectFilter,
+    sessionFilter: options.sessionFilter,
   });
 
   const result: PipelineResult = {
