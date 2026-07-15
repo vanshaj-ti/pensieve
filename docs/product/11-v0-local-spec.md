@@ -59,7 +59,7 @@ Within a given day's new lines, per session:
 
 ## 6. Recurrence Detection
 
-- Each stored insight gets embedded via Voyage AI API (Anthropic's recommended embedding provider — one more API call, same pattern as Haiku/Sonnet, no local ML setup needed).
+- Each stored insight gets embedded via Google Gemini embedding API (`text-embedding-004` or current equivalent) — separate vendor/key from the Haiku/Sonnet extraction calls, but same pattern: one more API call, no local ML setup needed.
 - `sqlite-vec` extension provides ANN similarity search directly inside the same SQLite file — no separate vector DB / no extra infra.
 - New insight compared against recent stored insights; similarity above threshold → tagged as recurrence of an existing pattern instead of re-asking Sonnet to "remember" via prompt stuffing.
 - Keeps cost and prompt size flat regardless of how much history has accumulated.
@@ -98,5 +98,5 @@ insights(id, episode_id, category, text, evidence_ref, significance_score,
 ## Decisions Locked
 
 1. **Implementation language/runtime: TypeScript (Node).** Chosen with an eye on a future dashboard/UI reusing the same stack (shared types, one language across CLI + web later). Ecosystem support: `better-sqlite3`, `sqlite-vec`, Anthropic SDK, Voyage SDK all solid.
-2. **Embedding provider: Voyage AI API.** Simplest path given no local ML setup desired — same call pattern as Haiku/Sonnet, no models to install/manage locally.
+2. **Embedding provider: Google Gemini embedding API.** Extraction (Haiku/Sonnet) stays on Anthropic; embeddings use a separate Gemini key. Two vendors, but no local ML setup needed either way.
 3. **Idle-gap threshold: configurable, default 25 min.** Exposed via config file / CLI flag, tunable per user without code changes.
