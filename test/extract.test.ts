@@ -40,6 +40,109 @@ describe('Extract: Haiku Pass', () => {
     vi.clearAllMocks();
   });
 
+  it('Case 1a: Haiku renders tool_result with string content', async () => {
+    const episode: EpisodeDraft = {
+      date: '2026-07-15',
+      projectDir: '/test/project',
+      sessionId: 'session-1',
+      startLine: 1,
+      endLine: 2,
+      lines: [
+        {
+          lineNumber: 1,
+          type: 'user',
+          timestamp: '2026-07-15T10:00:00Z',
+          hasToolUse: false,
+          raw: {
+            type: 'user',
+            timestamp: '2026-07-15T10:00:00Z',
+            message: { content: 'run tests' },
+          },
+        },
+        {
+          lineNumber: 2,
+          type: 'assistant',
+          timestamp: '2026-07-15T10:00:01Z',
+          hasToolUse: true,
+          raw: {
+            type: 'assistant',
+            timestamp: '2026-07-15T10:00:01Z',
+            message: {
+              content: [
+                { type: 'tool_use', name: 'run_command', input: { cmd: 'npm test' } },
+                { type: 'tool_result', content: 'All tests passed' },
+              ],
+            },
+          },
+        },
+      ],
+    };
+
+    mockCreate.mockResolvedValueOnce({
+      content: [{ type: 'tool_use', name: 'emit_candidates', input: { candidates: [] } }],
+    });
+
+    await generateCandidates(episode, client);
+    const call = mockCreate.mock.calls[0][0];
+    expect(call.messages[0].content).toContain('All tests passed');
+  });
+
+  it('Case 1b: Haiku renders tool_result with array text blocks', async () => {
+    const episode: EpisodeDraft = {
+      date: '2026-07-15',
+      projectDir: '/test/project',
+      sessionId: 'session-2',
+      startLine: 1,
+      endLine: 2,
+      lines: [
+        {
+          lineNumber: 1,
+          type: 'user',
+          timestamp: '2026-07-15T10:00:00Z',
+          hasToolUse: false,
+          raw: {
+            type: 'user',
+            timestamp: '2026-07-15T10:00:00Z',
+            message: { content: 'deploy' },
+          },
+        },
+        {
+          lineNumber: 2,
+          type: 'assistant',
+          timestamp: '2026-07-15T10:00:01Z',
+          hasToolUse: true,
+          raw: {
+            type: 'assistant',
+            timestamp: '2026-07-15T10:00:01Z',
+            message: {
+              content: [
+                { type: 'tool_use', name: 'deploy', input: {} },
+                {
+                  type: 'tool_result',
+                  content: [
+                    { type: 'text', text: 'Deployment started.' },
+                    { type: 'text', text: 'Build succeeded.' },
+                    { type: 'text', text: 'Live in production.' },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      ],
+    };
+
+    mockCreate.mockResolvedValueOnce({
+      content: [{ type: 'tool_use', name: 'emit_candidates', input: { candidates: [] } }],
+    });
+
+    await generateCandidates(episode, client);
+    const call = mockCreate.mock.calls[0][0];
+    expect(call.messages[0].content).toContain('Deployment started');
+    expect(call.messages[0].content).toContain('Build succeeded');
+    expect(call.messages[0].content).toContain('Live in production');
+  });
+
   it('Case 1: Haiku prompt assembly includes episode content and tool_use/tool_result blocks', async () => {
     const episode: EpisodeDraft = {
       date: '2026-07-15',

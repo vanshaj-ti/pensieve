@@ -56,7 +56,22 @@ function renderLines(lines: ParsedLine[]): RenderedLine[] {
               } else if ('type' in block && block.type === 'tool_use' && 'name' in block && 'input' in block) {
                 textParts.push(`[tool_use: ${String(block.name)}] ${JSON.stringify(block.input)}`);
               } else if ('type' in block && block.type === 'tool_result' && 'content' in block) {
-                textParts.push(`[tool_result] ${String(block.content)}`);
+                const trContent = block.content;
+                let trText = '';
+                if (typeof trContent === 'string') {
+                  trText = trContent;
+                } else if (Array.isArray(trContent)) {
+                  const trParts: string[] = [];
+                  for (const item of trContent) {
+                    if (typeof item === 'object' && item !== null && 'type' in item && item.type === 'text' && 'text' in item) {
+                      trParts.push(String(item.text));
+                    }
+                  }
+                  trText = trParts.join(' ');
+                }
+                if (trText) {
+                  textParts.push(`[tool_result] ${trText}`);
+                }
               }
             }
           }
