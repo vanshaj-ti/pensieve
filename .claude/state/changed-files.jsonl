@@ -1,0 +1,7 @@
+{"file":".agent-runs/20260715T121548-jsonl-ingestion-and-cursor/implementation-plan.md","action":"Write","timestamp":"2026-07-15T12:18:26Z","important":false}
+{"file":"src/ingest/parser.ts","action":"Write","timestamp":"2026-07-15T12:27:07Z","important":false}
+{"file":"src/ingest/scanner.ts","action":"Write","timestamp":"2026-07-15T12:27:17Z","important":false}
+{"file":"src/ingest/cursor.ts","action":"Write","timestamp":"2026-07-15T12:27:22Z","important":false}
+{"file":"src/ingest/index.ts","action":"Write","timestamp":"2026-07-15T12:27:27Z","important":false}
+{"file":"test/ingest.test.ts","action":"Write","timestamp":"2026-07-15T12:27:50Z","important":true}
+{"file":"/Users/vanshaj/gantry/gantry/engine.py","action":"Edit","timestamp":"2026-07-15T12:32:52Z","important":false}
