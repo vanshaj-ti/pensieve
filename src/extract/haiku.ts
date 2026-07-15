@@ -1,0 +1,169 @@
+import Anthropic from '@anthropic-ai/sdk';
+import { CandidateSchema, type Candidate } from '../types.js';
+import type { EpisodeDraft } from '../chunk/episodes.js';
+import type { ParsedLine } from '../ingest/parser.js';
+
+export class HaikuExtractionError extends Error {
+  constructor(
+    public readonly episode: Pick<EpisodeDraft, 'projectDir' | 'sessionId' | 'startLine' | 'endLine'>,
+    cause: unknown,
+  ) {
+    super(`Haiku candidate generation failed for episode ${episode.sessionId}:${episode.startLine}-${episode.endLine}`);
+    this.cause = cause;
+  }
+}
+
+const SYSTEM_PROMPT = `You are an insight extraction system. Your task is to identify actionable insights from development session transcripts.
+
+Extract insights that fall into one of these categories:
+- strategic_value: Important decisions, architectural insights, or long-term strategic value
+- decision_record: Key decisions made, their rationale, and implications
+- friction_audit: Pain points, bottlenecks, inefficiencies, or obstacles encountered
+- high_potential_seeds: Ideas, opportunities, or features with high potential impact
+- ai_leverage: Opportunities to use AI to improve development velocity or quality
+- ai_correction_load: Instances where the user had to correct AI output, signaling limitation areas
+
+Be high-recall: over-include candidates rather than being conservative. False positives are filtered in downstream verification; false negatives are permanent misses.
+
+For each insight, provide:
+- category: One of the six categories above
+- text: The insight text (will be polished downstream)
+- evidenceRef: Format "line:<lineNumber>" pointing to supporting evidence
+- evidenceSnippet: Exact quoted substring from the episode supporting the claim`;
+
+interface RenderedLine {
+  lineNumber: number;
+  type: string;
+  content: string;
+}
+
+function renderLines(lines: ParsedLine[]): RenderedLine[] {
+  return lines.map((line) => {
+    let content = '';
+
+    if (line.type === 'user') {
+      // User lines: render as-is
+      if (typeof line.raw === 'string') {
+        content = line.raw;
+      } else if (typeof line.raw === 'object' && line.raw !== null && 'content' in line.raw) {
+        content = String((line.raw as Record<string, unknown>).content);
+      }
+    } else if (line.type === 'assistant') {
+      // Assistant lines: include tool_use/tool_result content if present
+      if (typeof line.raw === 'object' && line.raw !== null && 'content' in line.raw) {
+        const rawContent = (line.raw as Record<string, unknown>).content;
+        if (Array.isArray(rawContent)) {
+          const textParts: string[] = [];
+          for (const block of rawContent) {
+            if (typeof block === 'object' && block !== null) {
+              if ('type' in block && block.type === 'text' && 'text' in block) {
+                textParts.push(String(block.text));
+              } else if ('type' in block && block.type === 'tool_use' && 'name' in block && 'input' in block) {
+                textParts.push(`[tool_use: ${String(block.name)}] ${JSON.stringify(block.input)}`);
+              } else if ('type' in block && block.type === 'tool_result' && 'content' in block) {
+                textParts.push(`[tool_result] ${String(block.content)}`);
+              }
+            }
+          }
+          content = textParts.join('\n');
+        }
+      }
+    }
+
+    return {
+      lineNumber: line.lineNumber,
+      type: line.type,
+      content,
+    };
+  });
+}
+
+export async function generateCandidates(
+  episode: EpisodeDraft,
+  client: Anthropic,
+): Promise<Candidate[]> {
+  try {
+    const renderedLines = renderLines(episode.lines);
+
+    const userMessage = `Episode from ${episode.date} (${episode.projectDir}/${episode.sessionId})\nLines ${episode.startLine}-${episode.endLine}:\n\n${renderedLines.map((line) => `[Line ${line.lineNumber}] (${line.type}): ${line.content}`).join('\n')}`;
+
+    const betaCreate = client.beta.promptCaching.messages.create as (params: unknown) => Promise<unknown>;
+    const response = (await betaCreate({
+      model: 'claude-haiku-4-5',
+      max_tokens: 2048,
+      system: [
+        {
+          type: 'text',
+          text: SYSTEM_PROMPT,
+          cache_control: { type: 'ephemeral' },
+        },
+      ],
+      tools: [
+        {
+          name: 'emit_candidates',
+          description: 'Emit extracted insight candidates',
+          input_schema: {
+            type: 'object' as const,
+            properties: {
+              candidates: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    category: {
+                      type: 'string',
+                      enum: [
+                        'strategic_value',
+                        'decision_record',
+                        'friction_audit',
+                        'high_potential_seeds',
+                        'ai_leverage',
+                        'ai_correction_load',
+                      ],
+                    },
+                    text: { type: 'string' },
+                    evidenceRef: { type: 'string' },
+                    evidenceSnippet: { type: 'string' },
+                  },
+                  required: ['category', 'text', 'evidenceRef', 'evidenceSnippet'],
+                },
+              },
+            },
+            required: ['candidates'],
+          },
+        },
+      ],
+      tool_choice: { type: 'tool', name: 'emit_candidates' },
+      messages: [
+        {
+          role: 'user',
+          content: userMessage,
+        },
+      ],
+    } as any)) as any;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const toolUse = (response as any).content.find((block: any) => block.type === 'tool_use');
+    if (!toolUse || toolUse.type !== 'tool_use') {
+      throw new Error('No tool_use block in response');
+    }
+
+    if (toolUse.name !== 'emit_candidates') {
+      throw new Error(`Expected tool_use named emit_candidates, got ${toolUse.name}`);
+    }
+
+    if (typeof toolUse.input !== 'object' || toolUse.input === null || !('candidates' in toolUse.input)) {
+      throw new Error('Tool input missing candidates array');
+    }
+
+    const candidates = Array.isArray(toolUse.input.candidates) ? toolUse.input.candidates : [];
+
+    return candidates.map((item: unknown) => {
+      const parsed = CandidateSchema.parse(item);
+      return parsed;
+    });
+  } catch (error) {
+    console.error(`Haiku extraction error for episode ${episode.sessionId}:${episode.startLine}-${episode.endLine}:`, error);
+    throw new HaikuExtractionError(episode, error);
+  }
+}
