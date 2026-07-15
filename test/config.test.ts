@@ -24,7 +24,19 @@ describe('loadConfig', () => {
     expect(config.idleGapMinutes).toBe(60);
   });
 
-  it('ignores invalid PENSIEVE_IDLE_GAP_MINUTES (non-numeric, zero, negative)', () => {
+  it('rejects decimal string "1.5" (not a whole number)', () => {
+    process.env.PENSIEVE_IDLE_GAP_MINUTES = '1.5';
+    const config = loadConfig();
+    expect(config.idleGapMinutes).toBe(DEFAULT_IDLE_GAP_MINUTES);
+  });
+
+  it('rejects "45minutes" (trailing text after number)', () => {
+    process.env.PENSIEVE_IDLE_GAP_MINUTES = '45minutes';
+    const config = loadConfig();
+    expect(config.idleGapMinutes).toBe(DEFAULT_IDLE_GAP_MINUTES);
+  });
+
+  it('rejects non-numeric, zero, and negative values', () => {
     process.env.PENSIEVE_IDLE_GAP_MINUTES = 'not-a-number';
     let config = loadConfig();
     expect(config.idleGapMinutes).toBe(DEFAULT_IDLE_GAP_MINUTES);

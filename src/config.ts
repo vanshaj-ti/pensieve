@@ -25,10 +25,14 @@ function envConfig(): Partial<Config> {
   const env: Partial<Config> = {};
 
   if (process.env.PENSIEVE_IDLE_GAP_MINUTES) {
-    const parsed = parseInt(process.env.PENSIEVE_IDLE_GAP_MINUTES, 10);
-    if (!isNaN(parsed) && parsed > 0) {
+    const value = process.env.PENSIEVE_IDLE_GAP_MINUTES.trim();
+    const parsed = Number(value);
+    // Strict validation: value must be a whole number > 0, not a truncated/coerced parse.
+    // Reject "45minutes", "1.5", "-10", "0", or any non-numeric string.
+    if (Number.isInteger(parsed) && parsed > 0) {
       env.idleGapMinutes = parsed;
     }
+    // If invalid, silently fall back to default (no throw).
   }
 
   return env;
