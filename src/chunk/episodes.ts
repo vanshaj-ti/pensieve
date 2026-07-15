@@ -14,12 +14,16 @@ export interface ChunkOptions {
   compactionLineNumbers?: Set<number>;
 }
 
+export function localDateKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export function bucketByDay(lines: ParsedLine[]): Map<string, ParsedLine[]> {
   const buckets = new Map<string, ParsedLine[]>();
 
   for (const line of lines) {
     const date = new Date(line.timestamp);
-    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    const key = localDateKey(date);
 
     if (!buckets.has(key)) {
       buckets.set(key, []);
