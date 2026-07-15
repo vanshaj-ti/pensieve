@@ -11,12 +11,18 @@ describe('CLI command function (direct invocation)', () => {
   it('--force passes force flag to pipeline', async () => {
     const { runAnalyzeCommand } = await import('../src/cli.js');
     const { runDailyAnalysis } = await import('../src/pipeline.js');
+    const { writeBrief } = await import('../src/brief.js');
 
     vi.mocked(runDailyAnalysis).mockResolvedValue({
       sessionsProcessed: 0,
       sessionsFailed: 0,
       insightsPersisted: 0,
       datesTouched: [],
+    });
+
+    vi.mocked(writeBrief).mockReturnValue({
+      path: '/tmp/brief.md',
+      insightCount: 0,
     });
 
     await runAnalyzeCommand({ force: true });
