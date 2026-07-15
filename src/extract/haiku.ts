@@ -40,21 +40,16 @@ interface RenderedLine {
 function renderLines(lines: ParsedLine[]): RenderedLine[] {
   return lines.map((line) => {
     let content = '';
+    const rawObj = line.raw as Record<string, unknown> | null;
 
-    if (line.type === 'user') {
-      // User lines: render as-is
-      if (typeof line.raw === 'string') {
-        content = line.raw;
-      } else if (typeof line.raw === 'object' && line.raw !== null && 'content' in line.raw) {
-        content = String((line.raw as Record<string, unknown>).content);
-      }
-    } else if (line.type === 'assistant') {
-      // Assistant lines: include tool_use/tool_result content if present
-      if (typeof line.raw === 'object' && line.raw !== null && 'content' in line.raw) {
-        const rawContent = (line.raw as Record<string, unknown>).content;
-        if (Array.isArray(rawContent)) {
+    if (rawObj && 'message' in rawObj) {
+      const message = rawObj.message as Record<string, unknown> | null;
+      if (message && 'content' in message) {
+        if (typeof message.content === 'string') {
+          content = message.content;
+        } else if (Array.isArray(message.content)) {
           const textParts: string[] = [];
-          for (const block of rawContent) {
+          for (const block of message.content) {
             if (typeof block === 'object' && block !== null) {
               if ('type' in block && block.type === 'text' && 'text' in block) {
                 textParts.push(String(block.text));
@@ -153,10 +148,13 @@ export async function generateCandidates(
     }
 
     if (typeof toolUse.input !== 'object' || toolUse.input === null || !('candidates' in toolUse.input)) {
-      throw new Error('Tool input missing candidates array');
+      throw new Error('Tool input missing candidates field');
     }
 
-    const candidates = Array.isArray(toolUse.input.candidates) ? toolUse.input.candidates : [];
+    const candidates = toolUse.input.candidates;
+    if (!Array.isArray(candidates)) {
+      throw new Error(`Tool input candidates must be an array, got ${typeof candidates}`);
+    }
 
     return candidates.map((item: unknown) => {
       const parsed = CandidateSchema.parse(item);

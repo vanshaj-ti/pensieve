@@ -146,10 +146,13 @@ Process these candidates: reject hallucinations, merge near-duplicates, score si
   }
 
   if (typeof toolUse.input !== 'object' || toolUse.input === null || !('insights' in toolUse.input)) {
-    throw new Error('Tool input missing insights array');
+    throw new Error('Tool input missing insights field');
   }
 
-  const insights = Array.isArray(toolUse.input.insights) ? toolUse.input.insights : [];
+  const insights = toolUse.input.insights;
+  if (!Array.isArray(insights)) {
+    throw new Error(`Tool input insights must be an array, got ${typeof insights}`);
+  }
 
   return insights.map((item: unknown) => {
     const itemObj = item as Record<string, unknown>;

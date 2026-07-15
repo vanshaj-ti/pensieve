@@ -40,7 +40,7 @@ describe('Extract: Haiku Pass', () => {
     vi.clearAllMocks();
   });
 
-  it('Case 1: Haiku prompt assembly includes episode content and tool_use blocks', async () => {
+  it('Case 1: Haiku prompt assembly includes episode content and tool_use/tool_result blocks', async () => {
     const episode: EpisodeDraft = {
       date: '2026-07-15',
       projectDir: '/test/project',
@@ -53,7 +53,16 @@ describe('Extract: Haiku Pass', () => {
           type: 'user',
           timestamp: '2026-07-15T10:00:00Z',
           hasToolUse: false,
-          raw: 'What should I build?',
+          raw: {
+            type: 'user',
+            timestamp: '2026-07-15T10:00:00Z',
+            message: {
+              content: [
+                { type: 'text', text: 'What should I build?' },
+                { type: 'tool_result', content: 'You asked this question' },
+              ],
+            },
+          },
         },
         {
           lineNumber: 2,
@@ -61,11 +70,15 @@ describe('Extract: Haiku Pass', () => {
           timestamp: '2026-07-15T10:00:01Z',
           hasToolUse: true,
           raw: {
-            content: [
-              { type: 'text', text: 'I can help.' },
-              { type: 'tool_use', name: 'file_editor', input: { action: 'write', path: 'src/index.ts' } },
-              { type: 'tool_result', content: 'File written successfully' },
-            ],
+            type: 'assistant',
+            timestamp: '2026-07-15T10:00:01Z',
+            message: {
+              content: [
+                { type: 'text', text: 'I can help.' },
+                { type: 'tool_use', name: 'file_editor', input: { action: 'write', path: 'src/index.ts' } },
+                { type: 'tool_result', content: 'File written successfully' },
+              ],
+            },
           },
         },
       ],
@@ -104,7 +117,11 @@ describe('Extract: Haiku Pass', () => {
           type: 'user',
           timestamp: '2026-07-15T10:00:00Z',
           hasToolUse: false,
-          raw: 'Test input',
+          raw: {
+            type: 'user',
+            timestamp: '2026-07-15T10:00:00Z',
+            message: { content: 'Test input' },
+          },
         },
       ],
     };
@@ -168,7 +185,11 @@ describe('Extract: Haiku Pass', () => {
           type: 'user',
           timestamp: '2026-07-15T10:00:00Z',
           hasToolUse: false,
-          raw: 'test',
+          raw: {
+            type: 'user',
+            timestamp: '2026-07-15T10:00:00Z',
+            message: { content: 'test' },
+          },
         },
       ],
     };
@@ -186,6 +207,43 @@ describe('Extract: Haiku Pass', () => {
                 evidenceRef: 'line:1',
               },
             ],
+          },
+        },
+      ],
+    });
+
+    await expect(generateCandidates(episode, client)).rejects.toThrow(HaikuExtractionError);
+  });
+
+  it('Case 5c: Non-array candidates field rejected', async () => {
+    const episode: EpisodeDraft = {
+      date: '2026-07-15',
+      projectDir: '/test/project',
+      sessionId: 'session-1',
+      startLine: 1,
+      endLine: 1,
+      lines: [
+        {
+          lineNumber: 1,
+          type: 'user',
+          timestamp: '2026-07-15T10:00:00Z',
+          hasToolUse: false,
+          raw: {
+            type: 'user',
+            timestamp: '2026-07-15T10:00:00Z',
+            message: { content: 'test' },
+          },
+        },
+      ],
+    };
+
+    mockCreate.mockResolvedValueOnce({
+      content: [
+        {
+          type: 'tool_use',
+          name: 'emit_candidates',
+          input: {
+            candidates: { category: 'strategic_value', text: 'not an array' },
           },
         },
       ],
@@ -360,6 +418,22 @@ describe('Extract: Sonnet Pass', () => {
 
     await expect(verifyAndScore([], [], client)).rejects.toThrow();
   });
+
+  it('Case 5d: Non-array insights field rejected', async () => {
+    mockCreate.mockResolvedValueOnce({
+      content: [
+        {
+          type: 'tool_use',
+          name: 'emit_insights',
+          input: {
+            insights: { episodeId: 1, category: 'strategic_value', text: 'not an array' },
+          },
+        },
+      ],
+    });
+
+    await expect(verifyAndScore([], [], client)).rejects.toThrow();
+  });
 });
 
 describe('Extract: Orchestration', () => {
@@ -427,7 +501,11 @@ describe('Extract: Orchestration', () => {
             type: 'user',
             timestamp: '2026-07-15T10:00:00Z',
             hasToolUse: false,
-            raw: 'episode 1',
+            raw: {
+              type: 'user',
+              timestamp: '2026-07-15T10:00:00Z',
+              message: { content: 'episode 1' },
+            },
           },
         ],
       },
@@ -444,7 +522,11 @@ describe('Extract: Orchestration', () => {
             type: 'user',
             timestamp: '2026-07-15T10:01:00Z',
             hasToolUse: false,
-            raw: 'episode 2',
+            raw: {
+              type: 'user',
+              timestamp: '2026-07-15T10:01:00Z',
+              message: { content: 'episode 2' },
+            },
           },
         ],
       },
@@ -516,7 +598,11 @@ describe('Extract: Orchestration', () => {
             type: 'user',
             timestamp: '2026-07-15T10:00:00Z',
             hasToolUse: false,
-            raw: 'test',
+            raw: {
+              type: 'user',
+              timestamp: '2026-07-15T10:00:00Z',
+              message: { content: 'test' },
+            },
           },
         ],
       },
@@ -583,7 +669,11 @@ describe('Extract: Orchestration', () => {
             type: 'user',
             timestamp: '2026-07-15T10:00:00Z',
             hasToolUse: false,
-            raw: 'test',
+            raw: {
+              type: 'user',
+              timestamp: '2026-07-15T10:00:00Z',
+              message: { content: 'test' },
+            },
           },
         ],
       },
