@@ -118,6 +118,69 @@ describe('ingest', () => {
       expect(result.lines[0].lineNumber).toBe(2);
       expect(result.lines[1].lineNumber).toBe(3);
     });
+
+    it('skips null JSON value gracefully', async () => {
+      const jsonl = join(tempDir, 'session.jsonl');
+      writeFileSync(
+        jsonl,
+        [
+          JSON.stringify({ type: 'user', timestamp: '2026-01-01T00:00:00Z' }),
+          'null',
+          JSON.stringify({ type: 'user', timestamp: '2026-01-01T00:00:01Z' }),
+        ].join('\n'),
+      );
+
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const result = await parseSessionLines(jsonl);
+      consoleSpy.mockRestore();
+
+      expect(result.lines).toHaveLength(2);
+      expect(result.lines[0].lineNumber).toBe(1);
+      expect(result.lines[1].lineNumber).toBe(3);
+      expect(result.maxLineNumber).toBe(3);
+    });
+
+    it('skips bare number JSON value gracefully', async () => {
+      const jsonl = join(tempDir, 'session.jsonl');
+      writeFileSync(
+        jsonl,
+        [
+          JSON.stringify({ type: 'user', timestamp: '2026-01-01T00:00:00Z' }),
+          '42',
+          JSON.stringify({ type: 'user', timestamp: '2026-01-01T00:00:01Z' }),
+        ].join('\n'),
+      );
+
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const result = await parseSessionLines(jsonl);
+      consoleSpy.mockRestore();
+
+      expect(result.lines).toHaveLength(2);
+      expect(result.lines[0].lineNumber).toBe(1);
+      expect(result.lines[1].lineNumber).toBe(3);
+      expect(result.maxLineNumber).toBe(3);
+    });
+
+    it('skips bare string JSON value gracefully', async () => {
+      const jsonl = join(tempDir, 'session.jsonl');
+      writeFileSync(
+        jsonl,
+        [
+          JSON.stringify({ type: 'user', timestamp: '2026-01-01T00:00:00Z' }),
+          '"hello"',
+          JSON.stringify({ type: 'user', timestamp: '2026-01-01T00:00:01Z' }),
+        ].join('\n'),
+      );
+
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const result = await parseSessionLines(jsonl);
+      consoleSpy.mockRestore();
+
+      expect(result.lines).toHaveLength(2);
+      expect(result.lines[0].lineNumber).toBe(1);
+      expect(result.lines[1].lineNumber).toBe(3);
+      expect(result.maxLineNumber).toBe(3);
+    });
   });
 
   describe('scanner', () => {

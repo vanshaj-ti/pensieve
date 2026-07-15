@@ -54,6 +54,13 @@ export async function parseSessionLines(
       continue;
     }
 
+    if (typeof parsed !== 'object' || parsed === null) {
+      console.warn(
+        `[parser] ${filePath}:${lineNumber} expected object, got ${typeof parsed}, skipping`,
+      );
+      continue;
+    }
+
     const obj = parsed as Record<string, unknown>;
     const type = obj.type as string | undefined;
 
