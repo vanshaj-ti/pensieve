@@ -13,22 +13,22 @@ skip_permissions = true
 output_format = "json"
 
 [models.plan]
-model = ""
+model = "claude-sonnet-5"
 max_turns = 40
 plan_mode = true
 
 [models.build]
-model = ""
+model = "claude-haiku-4-5"
 max_turns = 80
 
 [models.evidence]
-model = ""
+model = "claude-sonnet-5"
 max_turns = 120
 
 [review]
 enabled = true
-runner = "claude-code"
-model = ""
+runner = "codex-cli"
+model = "openai-group/gpt-5.6-terra"
 approve_keywords = ["APPROVE"]
 request_changes_keywords = ["REQUEST_CHANGES"]
 escalate_keywords = ["ESCALATE"]
