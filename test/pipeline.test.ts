@@ -45,7 +45,7 @@ describe('pipeline', () => {
 
     const insights: Insight[] = [
       {
-        episodeId: 1,
+        episodeId: 0, // Maps to the first (and only) episode in this day
         category: 'strategic_value',
         text: 'Test insight',
         evidenceRef: 'line 50',
@@ -127,7 +127,7 @@ describe('pipeline', () => {
 
     const insights: Insight[] = [
       {
-        episodeId: -1,
+        episodeId: 0, // Maps to the first (and only) episode in this day
         category: 'friction_audit',
         text: 'Dry run insight',
         evidenceRef: 'test',

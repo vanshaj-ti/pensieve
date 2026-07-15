@@ -61,51 +61,44 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
         draftsByDate.get(draft.date)!.push(draft);
       }
 
-      // Collect all data to persist before wrapping in transaction
-      interface PersistPlan {
+      // Collect extraction results and episode mappings before transaction
+      interface ExtractedDay {
         date: string;
-        persistedEpisodes: Array<typeof drafts[0] & { id: number }>;
-        insights: Insight[];
+        drafts: typeof drafts;
+        episodeToInsights: Map<number, Insight[]>; // Map temp episode ID to its insights
       }
 
-      const persistPlans: PersistPlan[] = [];
-      let fakeId = -1;
+      const extractedDays: ExtractedDay[] = [];
 
-      // Run extraction for all days first (async work)
+      // Run extraction for all days (async work outside transaction)
       for (const [date, dayDrafts] of draftsByDate) {
-        const persistedEpisodes: Array<typeof drafts[0] & { id: number }> = [];
+        // Build persisted episodes with temp IDs (index)
+        const persistedEpisodes = dayDrafts.map((draft, index) => ({
+          ...draft,
+          id: index,
+        }));
 
-        if (!options.dryRun) {
-          // In real mode, we'll assign real IDs after insert; use placeholder for now
-          for (const draft of dayDrafts) {
-            persistedEpisodes.push({
-              ...draft,
-              id: 0, // Placeholder; will be set during INSERT
-            });
+        // Extract all episodes together
+        const allInsights = await runExtraction(persistedEpisodes, db, client);
+
+        // Group insights by their episode ID (which is the temp index)
+        const episodeToInsights = new Map<number, Insight[]>();
+        for (const insight of allInsights) {
+          const episodeId = insight.episodeId;
+          if (!episodeToInsights.has(episodeId)) {
+            episodeToInsights.set(episodeId, []);
           }
-        } else {
-          // Dry run: fake IDs for extraction to use
-          for (const draft of dayDrafts) {
-            persistedEpisodes.push({
-              ...draft,
-              id: fakeId--,
-            });
-          }
+          episodeToInsights.get(episodeId)!.push(insight);
         }
 
-        const insights = await runExtraction(persistedEpisodes, db, client);
-
-        persistPlans.push({
+        extractedDays.push({
           date,
-          persistedEpisodes: dayDrafts.map((d, i) => ({
-            ...d,
-            id: i, // Temporary placeholder
-          })),
-          insights,
+          drafts: dayDrafts,
+          episodeToInsights,
         });
       }
 
-      // Wrap all DB writes in a single transaction (no async calls inside)
+      // Wrap all DB writes in a single transaction
       const sessionInserts = !options.dryRun
         ? db.transaction(() => {
             let totalInserts = 0;
@@ -118,10 +111,11 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             `);
 
-            for (const plan of persistPlans) {
-              // Insert episodes and capture real IDs
-              const episodeIds: number[] = [];
-              for (const draft of plan.persistedEpisodes) {
+            for (const day of extractedDays) {
+              // Insert all episodes and map temp IDs to real IDs
+              const tempToRealId = new Map<number, number>();
+              for (let tempId = 0; tempId < day.drafts.length; tempId++) {
+                const draft = day.drafts[tempId];
                 const info = insertEpisode.run(
                   draft.date,
                   draft.projectDir,
@@ -129,42 +123,50 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
                   draft.startLine,
                   draft.endLine,
                 );
-                episodeIds.push(info.lastInsertRowid as number);
+                tempToRealId.set(tempId, info.lastInsertRowid as number);
               }
 
-              // Insert insights with real episode IDs
-              for (let i = 0; i < plan.insights.length; i++) {
-                const insight = plan.insights[i];
-                const validated = InsightSchema.parse(insight);
-                insertInsight.run(
-                  episodeIds[i % episodeIds.length] || 0, // Map to episode; cycle if needed
-                  validated.category,
-                  validated.text,
-                  validated.evidenceRef,
-                  validated.significanceScore,
-                  validated.verifiedByGit,
-                  validated.recurrenceOf,
-                  validated.createdAt,
-                );
-                totalInserts++;
+              // Insert insights using correct real episode IDs
+              for (const [tempEpisodeId, insights] of day.episodeToInsights) {
+                const realEpisodeId = tempToRealId.get(tempEpisodeId) ?? 0;
+                for (const insight of insights) {
+                  const validated = InsightSchema.parse(insight);
+                  insertInsight.run(
+                    realEpisodeId,
+                    validated.category,
+                    validated.text,
+                    validated.evidenceRef,
+                    validated.significanceScore,
+                    validated.verifiedByGit,
+                    validated.recurrenceOf,
+                    validated.createdAt,
+                  );
+                  totalInserts++;
+                }
               }
 
-              if (!result.datesTouched.includes(plan.date)) {
-                result.datesTouched.push(plan.date);
+              if (!result.datesTouched.includes(day.date)) {
+                result.datesTouched.push(day.date);
               }
             }
 
             return totalInserts;
           })()
-        : persistPlans.reduce((sum, plan) => sum + plan.insights.length, 0);
+        : extractedDays.reduce((sum, day) => {
+            let daySum = 0;
+            for (const insights of day.episodeToInsights.values()) {
+              daySum += insights.length;
+            }
+            return sum + daySum;
+          }, 0);
 
       result.insightsPersisted += sessionInserts;
 
       // Track dates for dry-run
       if (options.dryRun) {
-        for (const plan of persistPlans) {
-          if (!result.datesTouched.includes(plan.date)) {
-            result.datesTouched.push(plan.date);
+        for (const day of extractedDays) {
+          if (!result.datesTouched.includes(day.date)) {
+            result.datesTouched.push(day.date);
           }
         }
       }
