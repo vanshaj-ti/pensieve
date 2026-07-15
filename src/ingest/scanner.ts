@@ -59,7 +59,7 @@ export function needsScan(filePath: string, lastRunAt: string | null): boolean {
   try {
     const fileMtime = statSync(filePath).mtime;
     const lastRunDate = new Date(lastRunAt);
-    return fileMtime > lastRunDate;
+    return fileMtime >= lastRunDate;
   } catch {
     return true;
   }
