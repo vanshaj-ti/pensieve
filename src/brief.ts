@@ -65,6 +65,10 @@ export function renderBriefMarkdown(insights: InsightWithRecurrenceDate[], date:
       }
       bullet += ` [${insight.significanceScore.toFixed(1)}]`;
 
+      if (insight.verifiedByGit) {
+        bullet += ` ✓ (verified)`;
+      }
+
       if (insight.recurrenceOf && insight.recurrenceDate) {
         bullet += ` (recurring — also seen on ${insight.recurrenceDate})`;
       } else if (insight.recurrenceOf) {

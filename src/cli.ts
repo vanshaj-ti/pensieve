@@ -29,17 +29,15 @@ export async function runAnalyzeCommand(opts: AnalyzeCommandOptions): Promise<vo
     const briefDates = new Set<string>();
 
     if (opts.date) {
-      // Use specified date
+      // Use only specified date (no additional dates)
       briefDates.add(opts.date);
     } else {
       // Use today + any dates from datesTouched
       const today = localDateKey(new Date());
       briefDates.add(today);
-    }
-
-    // Add all dates that had new data
-    for (const date of result.datesTouched) {
-      briefDates.add(date);
+      for (const date of result.datesTouched) {
+        briefDates.add(date);
+      }
     }
 
     const briefPaths: string[] = [];
@@ -102,4 +100,7 @@ program
     await runAnalyzeCommand(opts);
   });
 
-program.parse();
+// Only parse if this is the main entry point (not imported in tests)
+if (import.meta.url === `file://${process.argv[1]}`) {
+  program.parse();
+}
