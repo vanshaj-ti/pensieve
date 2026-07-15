@@ -173,4 +173,127 @@ describe('brief', () => {
     expect(markdown).toContain('Time wasted');
     expect(markdown).toContain('[0.6]');
   });
+
+  it('marks verified insights with checkmark', () => {
+    const insights: Insight[] = [
+      {
+        episodeId: 1,
+        category: 'strategic_value',
+        text: 'Verified insight',
+        evidenceRef: 'git commit',
+        significanceScore: 0.9,
+        verifiedByGit: true,
+        recurrenceOf: null,
+        createdAt: '2026-07-15T10:00:00Z',
+      },
+      {
+        episodeId: 1,
+        category: 'decision_record',
+        text: 'Unverified insight',
+        evidenceRef: 'notes',
+        significanceScore: 0.7,
+        verifiedByGit: false,
+        recurrenceOf: null,
+        createdAt: '2026-07-15T10:00:00Z',
+      },
+    ];
+
+    const markdown = renderBriefMarkdown(insights, '2026-07-15');
+
+    expect(markdown).toContain('Verified insight');
+    expect(markdown).toContain('✓ (verified)');
+    expect(markdown).toContain('Unverified insight');
+    // Unverified insight should NOT have the checkmark
+    const verifiedIdx = markdown.indexOf('Verified insight');
+    const unverifiedIdx = markdown.indexOf('Unverified insight');
+    const checkmarkAfterVerified = markdown.indexOf('✓ (verified)', verifiedIdx);
+    expect(checkmarkAfterVerified).toBeGreaterThan(verifiedIdx);
+    expect(checkmarkAfterVerified).toBeLessThan(unverifiedIdx);
+  });
+
+  it('renders recurrence note with source date', () => {
+    // Insert referenced insight with known date
+    db.prepare(`
+      INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
+      VALUES ('2026-07-10', '/tmp/project', 'session-1', 1, 5)
+    `).run();
+
+    const refId = db
+      .prepare(`
+        INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
+        VALUES (1, 'strategic_value', 'Original insight', 'old', 0.9, NULL, NULL, '2026-07-10T10:00:00Z')
+      `)
+      .run().lastInsertRowid;
+
+    // Insert current day's episode
+    db.prepare(`
+      INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
+      VALUES ('2026-07-15', '/tmp/project', 'session-1', 6, 10)
+    `).run();
+
+    const insights: Insight[] = [
+      {
+        episodeId: 2,
+        category: 'strategic_value',
+        text: 'Recurring insight',
+        evidenceRef: 'new evidence',
+        significanceScore: 0.85,
+        verifiedByGit: null,
+        recurrenceOf: Number(refId),
+        createdAt: '2026-07-15T10:00:00Z',
+        recurrenceDate: '2026-07-10',
+      },
+    ];
+
+    const markdown = renderBriefMarkdown(insights, '2026-07-15');
+
+    expect(markdown).toContain('Recurring insight');
+    expect(markdown).toContain('recurring — also seen on 2026-07-10');
+  });
+
+  it('writeBrief queries real DB and preserves recurrence/verified markers', () => {
+    // Set up two episodes on different dates
+    db.prepare(`
+      INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
+      VALUES ('2026-07-10', '/tmp/project', 'session-1', 1, 5)
+    `).run();
+
+    db.prepare(`
+      INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
+      VALUES ('2026-07-15', '/tmp/project', 'session-1', 6, 10)
+    `).run();
+
+    // Insert referenced insight
+    const refId = db
+      .prepare(`
+        INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
+        VALUES (1, 'strategic_value', 'Original', 'old', 0.9, 1, NULL, '2026-07-10T10:00:00Z')
+      `)
+      .run().lastInsertRowid;
+
+    // Insert current day's insights: one verified, one recurring
+    db.prepare(`
+      INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
+      VALUES (2, 'decision_record', 'Verified decision', 'git', 0.8, 1, NULL, '2026-07-15T10:00:00Z')
+    `).run();
+
+    db.prepare(`
+      INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
+      VALUES (2, 'friction_audit', 'Recurring friction', 'notes', 0.6, NULL, ?, '2026-07-15T10:00:00Z')
+    `).run(refId);
+
+    const result = writeBrief({
+      db,
+      date: '2026-07-15',
+      briefsDir,
+    });
+
+    const fileContent = readFileSync(result.path, 'utf-8');
+
+    expect(fileContent).toContain('Verified decision');
+    expect(fileContent).toContain('✓ (verified)');
+    expect(fileContent).toContain('Recurring friction');
+    expect(fileContent).toContain('recurring — also seen on 2026-07-10');
+    expect(result.insightCount).toBe(2);
+  });
 });

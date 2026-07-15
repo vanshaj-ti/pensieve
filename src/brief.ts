@@ -139,7 +139,7 @@ export function writeBrief(options: BriefOptions): { path: string; insightCount:
       text: row.text,
       evidenceRef: row.evidence_ref,
       significanceScore: row.significance_score,
-      verifiedByGit: row.verified_by_git,
+      verifiedByGit: row.verified_by_git ? true : null, // SQLite returns 1/0/null as number/null
       recurrenceOf: row.recurrence_of,
       createdAt: row.created_at,
     });
