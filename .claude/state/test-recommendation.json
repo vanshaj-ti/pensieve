@@ -1,7 +1,0 @@
-{
-  "timestamp": "2026-07-15T12:32:55Z",
-  "changed_file": "test/ingest.test.ts",
-  "test_command": "npm test",
-  "related_test": "",
-  "recommendation": "テストの実行を推奨します"
-}
