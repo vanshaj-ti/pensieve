@@ -10,3 +10,4 @@ dist/
 .agent-runs/
 .claude/
 .harness-mem/
+.repowise/
