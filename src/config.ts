@@ -21,9 +21,23 @@ function defaultConfig(): Config {
   };
 }
 
+function envConfig(): Partial<Config> {
+  const env: Partial<Config> = {};
+
+  if (process.env.PENSIEVE_IDLE_GAP_MINUTES) {
+    const parsed = parseInt(process.env.PENSIEVE_IDLE_GAP_MINUTES, 10);
+    if (!isNaN(parsed) && parsed > 0) {
+      env.idleGapMinutes = parsed;
+    }
+  }
+
+  return env;
+}
+
 export function loadConfig(overrides: Partial<Config> = {}): Config {
   return {
     ...defaultConfig(),
+    ...envConfig(),
     ...overrides,
   };
 }
