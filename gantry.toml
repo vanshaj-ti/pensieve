@@ -25,6 +25,11 @@ max_turns = 80
 model = "claude-sonnet-5"
 max_turns = 120
 
+[models.resolve]
+model = "claude-sonnet-5"
+max_turns = 80
+timeout = 900
+
 [review]
 enabled = true
 runner = "codex-cli"
@@ -35,6 +40,8 @@ escalate_keywords = ["ESCALATE"]
 
 [git]
 base_branch = "main"
+auto_ship = true
+auto_merge = true
 
 [scope]
 forbid_paths = [".env", "**/*.pem", "**/secrets/**", "**/*.key"]
@@ -43,6 +50,8 @@ enforce_plan_scope = true
 [checks]
 commands = ["npm run lint", "npm run build", "npm test"]
 timeout = 900
+auto_resolve = true
+resolve_attempts = 2
 
 [notify]
 backend = "none"
