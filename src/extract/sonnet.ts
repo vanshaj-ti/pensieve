@@ -79,8 +79,9 @@ ${historyList}
 
 Process these candidates: reject hallucinations, merge near-duplicates, score significance (1-5), polish text, and flag recurrence against history.`;
 
-  const betaCreate = client.beta.promptCaching.messages.create as (params: unknown) => Promise<unknown>;
-  const response = (await betaCreate({
+  // See haiku.ts for why this must be called directly, not via a detached
+  // function reference — casting the method strips its `this` binding.
+  const response = (await client.beta.promptCaching.messages.create({
     model: 'claude-sonnet-5',
     max_tokens: 4096,
     system: [

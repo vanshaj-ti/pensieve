@@ -97,8 +97,15 @@ export async function generateCandidates(
 
     const userMessage = `Episode from ${episode.date} (${episode.projectDir}/${episode.sessionId})\nLines ${episode.startLine}-${episode.endLine}:\n\n${renderedLines.map((line) => `[Line ${line.lineNumber}] (${line.type}): ${line.content}`).join('\n')}`;
 
-    const betaCreate = client.beta.promptCaching.messages.create as (params: unknown) => Promise<unknown>;
-    const response = (await betaCreate({
+    // NOTE: calling client.beta.promptCaching.messages.create directly (not via
+    // a detached function reference) is required — the SDK's Messages class
+    // reads `this._client` inside create(), and casting/assigning the method
+    // to a bare function type strips its `this` binding, making `this`
+    // undefined at call time (`Cannot read properties of undefined (reading
+    // '_client')`). This was a real bug: every real API call failed this way
+    // while unit tests passed, since they mock the client and never exercise
+    // real `this` binding.
+    const response = (await client.beta.promptCaching.messages.create({
       model: 'claude-haiku-4-5',
       max_tokens: 2048,
       system: [

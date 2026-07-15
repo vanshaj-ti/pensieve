@@ -26,7 +26,17 @@ export interface PipelineResult {
 export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<PipelineResult> {
   const config = loadConfig();
   const db = options.db ?? openDb(config.dbPath);
-  const client = options.client ?? new Anthropic();
+  // Explicitly pin apiKey + baseURL rather than letting the SDK read
+  // ANTHROPIC_BASE_URL / ANTHROPIC_CUSTOM_HEADERS from the ambient
+  // environment. This machine's shell sets those globally (for Claude Code's
+  // own proxy setup), which silently redirected every real API call to that
+  // proxy with the wrong auth scheme — a bare sk-ant-... key doesn't satisfy
+  // the proxy's expected header, producing a 401 that looked like a bad key
+  // but was actually a request going to the wrong endpoint entirely.
+  const client = options.client ?? new Anthropic({
+    apiKey: process.env.ANTHROPIC_API_KEY,
+    baseURL: 'https://api.anthropic.com',
+  });
 
   const scanResults = await scanNewLines(db, {
     claudeProjectsDir: options.claudeProjectsDir,
