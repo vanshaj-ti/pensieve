@@ -53,7 +53,7 @@ export async function runAnalyzeCommand(opts: AnalyzeCommandOptions): Promise<vo
       const db = openDb(config.dbPath);
       try {
         for (const date of Array.from(briefDates).sort()) {
-          const { path } = writeBrief({
+          const { path } = await writeBrief({
             db,
             date,
             briefsDir: config.briefsDir,
