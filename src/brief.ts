@@ -68,7 +68,9 @@ export function renderBriefMarkdown(
     recurrenceChains.forEach((chain) => {
       const firstDate = new Date(chain.span.firstDate);
       const lastDate = new Date(chain.span.lastDate);
-      const elapsedDays = Math.floor((lastDate.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24));
+      const elapsedDays = Math.floor(
+        (lastDate.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24),
+      );
       const bullet = `- ${chain.insights[0]!.text} — recurred ${chain.insights.length} times over ${elapsedDays} days (first seen ${chain.span.firstDate})`;
       lines.push(bullet);
     });

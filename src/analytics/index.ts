@@ -65,11 +65,7 @@ export function getCategoryTrend(db: Database.Database, days: number): CategoryT
   }));
 }
 
-export function getTopInsights(
-  db: Database.Database,
-  date: string,
-  limit: number,
-): TopInsight[] {
+export function getTopInsights(db: Database.Database, date: string, limit: number): TopInsight[] {
   const rows = db
     .prepare(
       `
@@ -142,7 +138,7 @@ export function getRecurrenceChains(db: Database.Database, days: number): Recurr
   }>;
 
   // Build a map of all insights for chain following
-  const insightMap = new Map<number, typeof insightsInWindow[0]>();
+  const insightMap = new Map<number, (typeof insightsInWindow)[0]>();
   const recurrenceMap = new Map<number, number>();
 
   for (const insight of insightsInWindow) {
@@ -189,7 +185,7 @@ export function getRecurrenceChains(db: Database.Database, days: number): Recurr
           WHERE i.id = ?
         `,
           )
-          .get(current) as typeof insightsInWindow[0] | undefined;
+          .get(current) as (typeof insightsInWindow)[0] | undefined;
 
         if (!row) {
           // Not found, treat current as root
@@ -257,7 +253,7 @@ export function getRecurrenceChains(db: Database.Database, days: number): Recurr
             WHERE i.id = ?
           `,
             )
-            .get(id) as typeof insightsInWindow[0] | undefined;
+            .get(id) as (typeof insightsInWindow)[0] | undefined;
           if (!row) return null;
         }
         return InsightSchema.parse({
