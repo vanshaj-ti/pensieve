@@ -32,6 +32,10 @@ export interface EffortBreakdown {
   overheadRatio: number;
 }
 
+export interface EffortBreakdownTrendPoint extends EffortBreakdown {
+  date: string;
+}
+
 export interface AnalyticsSnapshot {
   categoryTrend: CategoryTrendPoint[];
   topInsights: TopInsight[];
@@ -372,4 +376,78 @@ export function getCrossProjectRollup(db: Database.Database, date: string): Proj
     projectDir: row.project_dir,
     insightCount: row.count,
   }));
+}
+
+export function getInsightDates(db: Database.Database): string[] {
+  const rows = db
+    .prepare(
+      `
+    SELECT DISTINCT e.date
+    FROM insights i
+    JOIN episodes e ON i.episode_id = e.id
+    ORDER BY e.date DESC
+  `,
+    )
+    .all() as Array<{ date: string }>;
+
+  return rows.map((row) => row.date);
+}
+
+export function getEffortBreakdownTrend(
+  db: Database.Database,
+  days: number,
+): EffortBreakdownTrendPoint[] {
+  const cutoffMs = Date.now() - days * 86400000;
+  const cutoffDate = localDateKey(cutoffMs);
+
+  const rows = db
+    .prepare(
+      `
+    SELECT e.date, i.effort_class, COUNT(*) as count
+    FROM insights i
+    JOIN episodes e ON i.episode_id = e.id
+    WHERE e.date >= ?
+    GROUP BY e.date, i.effort_class
+    ORDER BY e.date ASC
+  `,
+    )
+    .all(cutoffDate) as Array<{
+    date: string;
+    effort_class: string;
+    count: number;
+  }>;
+
+  const dateMap = new Map<string, { toil: number; judgment: number; overhead: number }>();
+  const dates = new Set<string>();
+
+  for (const row of rows) {
+    dates.add(row.date);
+    if (!dateMap.has(row.date)) {
+      dateMap.set(row.date, { toil: 0, judgment: 0, overhead: 0 });
+    }
+    const counts = dateMap.get(row.date)!;
+    if (
+      row.effort_class === 'toil' ||
+      row.effort_class === 'judgment' ||
+      row.effort_class === 'overhead'
+    ) {
+      counts[row.effort_class] = row.count;
+    }
+  }
+
+  const sortedDates = Array.from(dates).sort();
+  return sortedDates.map((date) => {
+    const counts = dateMap.get(date)!;
+    const total = counts.toil + counts.judgment + counts.overhead;
+    return {
+      date,
+      toil: counts.toil,
+      judgment: counts.judgment,
+      overhead: counts.overhead,
+      total,
+      toilRatio: total > 0 ? counts.toil / total : 0,
+      judgmentRatio: total > 0 ? counts.judgment / total : 0,
+      overheadRatio: total > 0 ? counts.overhead / total : 0,
+    };
+  });
 }

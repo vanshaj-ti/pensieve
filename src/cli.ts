@@ -6,6 +6,7 @@ import { openDb } from './db/schema.js';
 import { runDailyAnalysis } from './pipeline.js';
 import { writeBrief } from './brief.js';
 import { localDateKey } from './chunk/episodes.js';
+import { startDashboardServer } from './dashboard/server.js';
 
 const program = new Command();
 
@@ -53,7 +54,7 @@ export async function runAnalyzeCommand(opts: AnalyzeCommandOptions): Promise<vo
       const db = openDb(config.dbPath);
       try {
         for (const date of Array.from(briefDates).sort()) {
-          const { path } = writeBrief({
+          const { path } = await writeBrief({
             db,
             date,
             briefsDir: config.briefsDir,
@@ -112,6 +113,29 @@ program
   .option('--session <sessionId>', 'Scope to one session within --project (filename minus .jsonl)')
   .action(async (opts: AnalyzeCommandOptions) => {
     await runAnalyzeCommand(opts);
+  });
+
+program
+  .command('dashboard')
+  .description('Start a local web dashboard for browsing analytics.')
+  .option('--port <number>', 'Port to listen on', '4200')
+  .option('--db <path>', 'Override the database path')
+  .action((opts: { port: string; db?: string }) => {
+    try {
+      const config = loadConfig(opts.db ? { dbPath: opts.db } : {});
+      const port = Number(opts.port);
+      if (isNaN(port) || port < 1 || port > 65535) {
+        console.error('Error: port must be a valid number between 1 and 65535');
+        process.exitCode = 1;
+        return;
+      }
+      startDashboardServer(config, port);
+      console.log(`Dashboard running at http://localhost:${port}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`Error: ${message}`);
+      process.exitCode = 1;
+    }
   });
 
 // Only parse if this is the main entry point (not imported in tests)
