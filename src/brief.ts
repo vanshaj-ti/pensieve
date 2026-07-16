@@ -4,6 +4,14 @@ import { join } from 'node:path';
 import { loadConfig } from './config.js';
 import { openDb } from './db/schema.js';
 import { Insight, InsightSchema, InsightCategory } from './types.js';
+import {
+  getTopInsights,
+  getRecurrenceChains,
+  getCrossProjectRollup,
+  type TopInsight,
+  type RecurrenceChain,
+  type ProjectRollup,
+} from './analytics/index.js';
 
 export interface BriefOptions {
   db: Database.Database;
@@ -33,7 +41,50 @@ interface InsightWithRecurrenceDate extends Insight {
   recurrenceDate?: string;
 }
 
-export function renderBriefMarkdown(insights: InsightWithRecurrenceDate[], date: string): string {
+export function renderBriefMarkdown(
+  insights: InsightWithRecurrenceDate[],
+  date: string,
+  topInsights: TopInsight[] = [],
+  recurrenceChains: RecurrenceChain[] = [],
+  crossProjectRollup: ProjectRollup[] = [],
+): string {
+  const lines: string[] = [`# Pensieve Brief — ${date}\n`];
+
+  if (topInsights.length > 0) {
+    lines.push(`## Top Insights Today\n`);
+    topInsights.forEach((insight, idx) => {
+      let bullet = `${idx + 1}. ${insight.text}`;
+      if (insight.evidenceRef) {
+        bullet += ` _(${insight.evidenceRef})_`;
+      }
+      bullet += ` [${insight.significanceScore.toFixed(1)}]`;
+      lines.push(bullet);
+    });
+    lines.push('');
+  }
+
+  if (recurrenceChains.length > 0) {
+    lines.push(`## Recurring Patterns\n`);
+    recurrenceChains.forEach((chain) => {
+      const firstDate = new Date(chain.span.firstDate);
+      const lastDate = new Date(chain.span.lastDate);
+      const elapsedDays = Math.floor(
+        (lastDate.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24),
+      );
+      const bullet = `- ${chain.insights[0]!.text} — recurred ${chain.insights.length} times over ${elapsedDays} days (first seen ${chain.span.firstDate})`;
+      lines.push(bullet);
+    });
+    lines.push('');
+  }
+
+  if (crossProjectRollup.length > 1) {
+    lines.push(`## By Project\n`);
+    crossProjectRollup.forEach((rollup) => {
+      lines.push(`- ${rollup.projectDir}: ${rollup.insightCount} insights`);
+    });
+    lines.push('');
+  }
+
   const grouped = new Map<InsightCategory, InsightWithRecurrenceDate[]>();
 
   for (const cat of CATEGORY_ORDER) {
@@ -47,8 +98,6 @@ export function renderBriefMarkdown(insights: InsightWithRecurrenceDate[], date:
     }
     grouped.get(cat)!.push(insight);
   }
-
-  const lines: string[] = [`# Pensieve Brief — ${date}\n`];
 
   for (const cat of CATEGORY_ORDER) {
     const catInsights = grouped.get(cat)!;
@@ -149,7 +198,18 @@ export function writeBrief(options: BriefOptions): { path: string; insightCount:
     return { ...validated, recurrenceDate: recDate || undefined };
   });
 
-  const markdown = renderBriefMarkdown(insightsWithDates, date);
+  // Fetch analytics data
+  const topInsights = getTopInsights(db, date, 5);
+  const recurrenceChains = getRecurrenceChains(db, 30);
+  const crossProjectRollup = getCrossProjectRollup(db, date);
+
+  const markdown = renderBriefMarkdown(
+    insightsWithDates,
+    date,
+    topInsights,
+    recurrenceChains,
+    crossProjectRollup,
+  );
 
   // Create directory and write file
   mkdirSync(briefsDir, { recursive: true });

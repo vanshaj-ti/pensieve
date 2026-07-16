@@ -324,4 +324,219 @@ describe('brief', () => {
     expect(fileContent).toContain('recurring — also seen on 2026-07-10');
     expect(result.insightCount).toBe(2);
   });
+
+  it('renders top insights section with highest scoring insights', () => {
+    db.prepare(
+      `
+      INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
+      VALUES ('2026-07-15', '/tmp/project', 'session-1', 1, 10)
+    `,
+    ).run();
+
+    db.prepare(
+      `
+      INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
+      VALUES (1, 'strategic_value', 'Top insight', 'ref1', 0.95, NULL, NULL, '2026-07-15T10:00:00Z'),
+             (1, 'friction_audit', 'Mid insight', 'ref2', 0.5, NULL, NULL, '2026-07-15T10:00:00Z'),
+             (1, 'decision_record', 'High insight', 'ref3', 0.85, NULL, NULL, '2026-07-15T10:00:00Z')
+    `,
+    ).run();
+
+    const result = writeBrief({
+      db,
+      date: '2026-07-15',
+      briefsDir,
+    });
+
+    const fileContent = readFileSync(result.path, 'utf-8');
+
+    expect(fileContent).toContain('## Top Insights Today');
+    expect(fileContent).toContain('1. Top insight');
+    expect(fileContent).toContain('2. High insight');
+  });
+
+  it('omits top insights section for date with no insights', () => {
+    const insights: Insight[] = [];
+    const markdown = renderBriefMarkdown(insights, '2026-07-15');
+
+    expect(markdown).not.toContain('## Top Insights Today');
+  });
+
+  it('renders recurring patterns section with chains', () => {
+    db.prepare(
+      `
+      INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
+      VALUES ('2026-07-15', '/tmp/project', 'session-1', 1, 5),
+             ('2026-07-15', '/tmp/project', 'session-1', 6, 10),
+             ('2026-07-15', '/tmp/project', 'session-1', 11, 15)
+    `,
+    ).run();
+
+    // Create recurrence chain: A <- B <- C, all on same date so all appear in brief
+    const rootId = db
+      .prepare(
+        `
+        INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
+        VALUES (1, 'friction_audit', 'Root friction', 'ref', 0.8, NULL, NULL, '2026-07-15T10:00:00Z')
+      `,
+      )
+      .run().lastInsertRowid;
+
+    const childId = db
+      .prepare(
+        `
+        INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
+        VALUES (2, 'friction_audit', 'Recurring friction occurrence 2', 'ref', 0.7, NULL, ?, '2026-07-15T10:00:00Z')
+      `,
+      )
+      .run(rootId).lastInsertRowid;
+
+    db.prepare(
+      `
+      INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
+      VALUES (3, 'friction_audit', 'Recurring friction occurrence 3', 'ref', 0.6, NULL, ?, '2026-07-15T10:00:00Z')
+    `,
+    ).run(childId);
+
+    const result = writeBrief({
+      db,
+      date: '2026-07-15',
+      briefsDir,
+    });
+
+    const fileContent = readFileSync(result.path, 'utf-8');
+
+    expect(fileContent).toContain('## Recurring Patterns');
+    expect(fileContent).toContain('recurred');
+  });
+
+  it('omits recurring patterns section when no recurrence', () => {
+    db.prepare(
+      `
+      INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
+      VALUES ('2026-07-15', '/tmp/project', 'session-1', 1, 10)
+    `,
+    ).run();
+
+    db.prepare(
+      `
+      INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
+      VALUES (1, 'strategic_value', 'One-off insight', 'ref', 0.8, NULL, NULL, '2026-07-15T10:00:00Z')
+    `,
+    ).run();
+
+    const result = writeBrief({
+      db,
+      date: '2026-07-15',
+      briefsDir,
+    });
+
+    const fileContent = readFileSync(result.path, 'utf-8');
+
+    expect(fileContent).not.toContain('## Recurring Patterns');
+  });
+
+  it('renders by project section for multi-project days', () => {
+    db.prepare(
+      `
+      INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
+      VALUES ('2026-07-15', '/project1', 'session-1', 1, 5),
+             ('2026-07-15', '/project2', 'session-1', 6, 10)
+    `,
+    ).run();
+
+    db.prepare(
+      `
+      INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
+      VALUES (1, 'strategic_value', 'Project 1 insight', 'ref1', 0.8, NULL, NULL, '2026-07-15T10:00:00Z'),
+             (2, 'strategic_value', 'Project 2 insight A', 'ref2', 0.7, NULL, NULL, '2026-07-15T10:00:00Z'),
+             (2, 'strategic_value', 'Project 2 insight B', 'ref3', 0.6, NULL, NULL, '2026-07-15T10:00:00Z')
+    `,
+    ).run();
+
+    const result = writeBrief({
+      db,
+      date: '2026-07-15',
+      briefsDir,
+    });
+
+    const fileContent = readFileSync(result.path, 'utf-8');
+
+    expect(fileContent).toContain('## By Project');
+    expect(fileContent).toContain('/project1: 1 insights');
+    expect(fileContent).toContain('/project2: 2 insights');
+  });
+
+  it('omits by project section for single-project days', () => {
+    db.prepare(
+      `
+      INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
+      VALUES ('2026-07-15', '/tmp/project', 'session-1', 1, 10)
+    `,
+    ).run();
+
+    db.prepare(
+      `
+      INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
+      VALUES (1, 'strategic_value', 'Single project insight', 'ref', 0.8, NULL, NULL, '2026-07-15T10:00:00Z')
+    `,
+    ).run();
+
+    const result = writeBrief({
+      db,
+      date: '2026-07-15',
+      briefsDir,
+    });
+
+    const fileContent = readFileSync(result.path, 'utf-8');
+
+    expect(fileContent).not.toContain('## By Project');
+  });
+
+  it('renders recurrence summary with elapsed days not occurrence count', () => {
+    // Create chain spanning 5 days: 07-10, 07-12, 07-15
+    db.prepare(
+      `
+      INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
+      VALUES ('2026-07-10', '/tmp/project', 'session-1', 1, 5),
+             ('2026-07-12', '/tmp/project', 'session-1', 6, 10),
+             ('2026-07-15', '/tmp/project', 'session-1', 11, 15)
+    `,
+    ).run();
+
+    const rootId = db
+      .prepare(
+        `
+        INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
+        VALUES (1, 'friction_audit', 'Root friction', 'ref', 0.8, NULL, NULL, '2026-07-10T10:00:00Z')
+      `,
+      )
+      .run().lastInsertRowid;
+
+    db.prepare(
+      `
+      INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
+      VALUES (2, 'friction_audit', 'Mid occurrence', 'ref', 0.7, NULL, ?, '2026-07-12T10:00:00Z')
+    `,
+    ).run(rootId);
+
+    db.prepare(
+      `
+      INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
+      VALUES (3, 'friction_audit', 'Last occurrence', 'ref', 0.6, NULL, ?, '2026-07-15T10:00:00Z')
+    `,
+    ).run(rootId);
+
+    const result = writeBrief({
+      db,
+      date: '2026-07-15',
+      briefsDir,
+    });
+
+    const fileContent = readFileSync(result.path, 'utf-8');
+
+    expect(fileContent).toContain('## Recurring Patterns');
+    // 3 occurrences over 5 elapsed days (07-10 to 07-15)
+    expect(fileContent).toContain('recurred 3 times over 5 days');
+  });
 });
