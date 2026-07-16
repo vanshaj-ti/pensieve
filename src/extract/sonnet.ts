@@ -126,6 +126,9 @@ Process these candidates: reject hallucinations, merge near-duplicates, score si
   const response = (await client.beta.promptCaching.messages.create({
     model: 'claude-sonnet-5',
     max_tokens: 16384,
+    // See haiku.ts for why this is pinned to 0 rather than left at the API
+    // default — determinism for repeated runs, no cost/latency tradeoff.
+    temperature: 0,
     system: [
       {
         type: 'text',

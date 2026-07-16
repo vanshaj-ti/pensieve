@@ -88,9 +88,10 @@ describe('synthesizeBriefNarrative', () => {
       client,
     );
 
-    const body = capturedArgs as { messages: Array<{ content: string }> };
+    const body = capturedArgs as { messages: Array<{ content: string }>; temperature: number };
     expect(body.messages[0].content).toContain('A very specific friction point');
     expect(body.messages[0].content).toContain('100% toil');
+    expect(body.temperature).toBe(0);
   });
 
   it('returns null (no throw) when the response has no text block', async () => {
