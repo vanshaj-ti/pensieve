@@ -438,7 +438,7 @@ describe('Extract: Sonnet Pass', () => {
     expect(userMessage).toContain('Candidate 1');
     expect(userMessage).toContain('Candidate 2');
     expect(userMessage).toContain('Previous insight');
-    expect(call.temperature).toBe(0);
+    expect(call.temperature).toBeUndefined();
   });
 
   it('Case 4: Sonnet response parsing with recurrence field', async () => {
