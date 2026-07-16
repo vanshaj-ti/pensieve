@@ -40,8 +40,13 @@ escalate_keywords = ["ESCALATE"]
 
 [git]
 base_branch = "main"
+# main now has branch protection (no direct push, PR + passing CI required
+# to merge). auto_ship only pushes to the run's own feature branch and
+# opens a PR against main — safe to keep on. auto_merge is the one that
+# bypasses human review (auto-merges the PR itself) and defeats the point
+# of requiring PRs, so it stays off until the ship flow is revisited.
 auto_ship = true
-auto_merge = true
+auto_merge = false
 
 [scope]
 forbid_paths = [".env", "**/*.pem", "**/secrets/**", "**/*.key"]
