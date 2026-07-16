@@ -22,7 +22,7 @@ describe('brief', () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it('renders markdown with categories in fixed order', () => {
+  it('renders markdown with categories in fixed order', async () => {
     const insights: Insight[] = [
       {
         episodeId: 1,
@@ -70,7 +70,7 @@ describe('brief', () => {
     expect(decisionIdx).toBeLessThan(aiIdx);
   });
 
-  it('omits empty categories', () => {
+  it('omits empty categories', async () => {
     const insights: Insight[] = [
       {
         episodeId: 1,
@@ -91,7 +91,7 @@ describe('brief', () => {
     expect(markdown).not.toContain('## AI Correction Load');
   });
 
-  it('writeBrief creates directory and writes file', () => {
+  it('writeBrief creates directory and writes file', async () => {
     // Pre-populate with insights
     db.prepare(
       `
@@ -107,7 +107,8 @@ describe('brief', () => {
     `,
     ).run();
 
-    const result = writeBrief({
+    const result = await writeBrief({
+      client: null,
       db,
       date: '2026-07-15',
       briefsDir,
@@ -121,7 +122,7 @@ describe('brief', () => {
     expect(fileContent).toContain('Strategic Value');
   });
 
-  it('groups insights correctly across multiple dates', () => {
+  it('groups insights correctly across multiple dates', async () => {
     // Insert episodes for multiple dates
     db.prepare(
       `
@@ -152,7 +153,8 @@ describe('brief', () => {
     `,
     ).run();
 
-    const result = writeBrief({
+    const result = await writeBrief({
+      client: null,
       db,
       date: '2026-07-15',
       briefsDir,
@@ -166,7 +168,7 @@ describe('brief', () => {
     expect(result.insightCount).toBe(1);
   });
 
-  it('handles insights with missing evidence ref', () => {
+  it('handles insights with missing evidence ref', async () => {
     const insights: Insight[] = [
       {
         episodeId: 1,
@@ -186,7 +188,7 @@ describe('brief', () => {
     expect(markdown).toContain('[0.6]');
   });
 
-  it('marks verified insights with checkmark', () => {
+  it('marks verified insights with checkmark', async () => {
     const insights: Insight[] = [
       {
         episodeId: 1,
@@ -223,7 +225,7 @@ describe('brief', () => {
     expect(checkmarkAfterVerified).toBeLessThan(unverifiedIdx);
   });
 
-  it('renders recurrence note with source date', () => {
+  it('renders recurrence note with source date', async () => {
     // Insert referenced insight with known date
     db.prepare(
       `
@@ -269,7 +271,7 @@ describe('brief', () => {
     expect(markdown).toContain('recurring — also seen on 2026-07-10');
   });
 
-  it('writeBrief queries real DB and preserves recurrence/verified markers', () => {
+  it('writeBrief queries real DB and preserves recurrence/verified markers', async () => {
     // Set up two episodes on different dates
     db.prepare(
       `
@@ -310,7 +312,8 @@ describe('brief', () => {
     `,
     ).run(refId);
 
-    const result = writeBrief({
+    const result = await writeBrief({
+      client: null,
       db,
       date: '2026-07-15',
       briefsDir,
@@ -325,7 +328,7 @@ describe('brief', () => {
     expect(result.insightCount).toBe(2);
   });
 
-  it('renders top insights section with highest scoring insights', () => {
+  it('renders top insights section with highest scoring insights', async () => {
     db.prepare(
       `
       INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
@@ -342,7 +345,8 @@ describe('brief', () => {
     `,
     ).run();
 
-    const result = writeBrief({
+    const result = await writeBrief({
+      client: null,
       db,
       date: '2026-07-15',
       briefsDir,
@@ -355,14 +359,14 @@ describe('brief', () => {
     expect(fileContent).toContain('2. High insight');
   });
 
-  it('omits top insights section for date with no insights', () => {
+  it('omits top insights section for date with no insights', async () => {
     const insights: Insight[] = [];
     const markdown = renderBriefMarkdown(insights, '2026-07-15');
 
     expect(markdown).not.toContain('## Top Insights Today');
   });
 
-  it('renders recurring patterns section with chains', () => {
+  it('renders recurring patterns section with chains', async () => {
     db.prepare(
       `
       INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
@@ -398,7 +402,8 @@ describe('brief', () => {
     `,
     ).run(childId);
 
-    const result = writeBrief({
+    const result = await writeBrief({
+      client: null,
       db,
       date: '2026-07-15',
       briefsDir,
@@ -410,7 +415,7 @@ describe('brief', () => {
     expect(fileContent).toContain('recurred');
   });
 
-  it('omits recurring patterns section when no recurrence', () => {
+  it('omits recurring patterns section when no recurrence', async () => {
     db.prepare(
       `
       INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
@@ -425,7 +430,8 @@ describe('brief', () => {
     `,
     ).run();
 
-    const result = writeBrief({
+    const result = await writeBrief({
+      client: null,
       db,
       date: '2026-07-15',
       briefsDir,
@@ -436,7 +442,7 @@ describe('brief', () => {
     expect(fileContent).not.toContain('## Recurring Patterns');
   });
 
-  it('renders by project section for multi-project days', () => {
+  it('renders by project section for multi-project days', async () => {
     db.prepare(
       `
       INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
@@ -454,7 +460,8 @@ describe('brief', () => {
     `,
     ).run();
 
-    const result = writeBrief({
+    const result = await writeBrief({
+      client: null,
       db,
       date: '2026-07-15',
       briefsDir,
@@ -467,7 +474,7 @@ describe('brief', () => {
     expect(fileContent).toContain('/project2: 2 insights');
   });
 
-  it('omits by project section for single-project days', () => {
+  it('omits by project section for single-project days', async () => {
     db.prepare(
       `
       INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
@@ -482,7 +489,8 @@ describe('brief', () => {
     `,
     ).run();
 
-    const result = writeBrief({
+    const result = await writeBrief({
+      client: null,
       db,
       date: '2026-07-15',
       briefsDir,
@@ -493,7 +501,7 @@ describe('brief', () => {
     expect(fileContent).not.toContain('## By Project');
   });
 
-  it('renders recurrence summary with elapsed days not occurrence count', () => {
+  it('renders recurrence summary with elapsed days not occurrence count', async () => {
     // Create chain spanning 5 days: 07-10, 07-12, 07-15
     db.prepare(
       `
@@ -527,7 +535,8 @@ describe('brief', () => {
     `,
     ).run(rootId);
 
-    const result = writeBrief({
+    const result = await writeBrief({
+      client: null,
       db,
       date: '2026-07-15',
       briefsDir,
@@ -540,7 +549,7 @@ describe('brief', () => {
     expect(fileContent).toContain('recurred 3 times over 5 days');
   });
 
-  it('renders Effort Breakdown section with ratios when insights exist', () => {
+  it('renders Effort Breakdown section with ratios when insights exist', async () => {
     db.prepare(
       `
       INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
@@ -558,7 +567,7 @@ describe('brief', () => {
     `,
     ).run();
 
-    const result = writeBrief({ db, date: '2026-07-15', briefsDir });
+    const result = await writeBrief({ db, date: '2026-07-15', briefsDir, client: null });
     const fileContent = readFileSync(result.path, 'utf-8');
 
     expect(fileContent).toContain('## Effort Breakdown');
@@ -568,8 +577,8 @@ describe('brief', () => {
     expect(fileContent).toContain('4 insights today');
   });
 
-  it('omits Effort Breakdown section when there are no insights for the date', () => {
-    const result = writeBrief({ db, date: '2026-07-15', briefsDir });
+  it('omits Effort Breakdown section when there are no insights for the date', async () => {
+    const result = await writeBrief({ db, date: '2026-07-15', briefsDir, client: null });
     const fileContent = readFileSync(result.path, 'utf-8');
 
     expect(fileContent).not.toContain('## Effort Breakdown');

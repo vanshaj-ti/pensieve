@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3';
+import type Anthropic from '@anthropic-ai/sdk';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadConfig } from './config.js';
@@ -14,11 +15,17 @@ import {
   type ProjectRollup,
   type EffortBreakdown,
 } from './analytics/index.js';
+import { synthesizeBriefNarrative } from './synthesis.js';
 
 export interface BriefOptions {
   db: Database.Database;
   date: string;
   briefsDir: string;
+  /** Optional Anthropic client for the narrative synthesis call. If omitted,
+   * a default client is constructed the same way pipeline.ts does. Pass
+   * `client: null` explicitly to skip synthesis entirely (e.g. in tests
+   * that don't want any API call attempted). */
+  client?: Anthropic | null;
 }
 
 const CATEGORY_ORDER: InsightCategory[] = [
@@ -50,8 +57,14 @@ export function renderBriefMarkdown(
   recurrenceChains: RecurrenceChain[] = [],
   crossProjectRollup: ProjectRollup[] = [],
   effortBreakdown?: EffortBreakdown,
+  narrative?: string | null,
 ): string {
   const lines: string[] = [`# Pensieve Brief — ${date}\n`];
+
+  if (narrative) {
+    lines.push(narrative);
+    lines.push('');
+  }
 
   if (effortBreakdown && effortBreakdown.total > 0) {
     const pct = (r: number) => `${Math.round(r * 100)}%`;
@@ -145,7 +158,9 @@ export function renderBriefMarkdown(
   return lines.join('\n');
 }
 
-export function writeBrief(options: BriefOptions): { path: string; insightCount: number } {
+export async function writeBrief(
+  options: BriefOptions,
+): Promise<{ path: string; insightCount: number }> {
   const config = loadConfig();
   const { db: providedDb, date, briefsDir } = options;
   const db = providedDb ?? openDb(config.dbPath);
@@ -218,6 +233,18 @@ export function writeBrief(options: BriefOptions): { path: string; insightCount:
   const crossProjectRollup = getCrossProjectRollup(db, date);
   const effortBreakdown = getEffortBreakdown(db, date);
 
+  // Narrative synthesis is additive polish — never let a failure here block
+  // brief generation. `client: null` opts out explicitly (used by tests);
+  // omitting `client` uses the default constructed inside
+  // synthesizeBriefNarrative (matching pipeline.ts's client pattern).
+  const narrative =
+    options.client === null
+      ? null
+      : await synthesizeBriefNarrative(
+          { insights: insightsWithDates, effortBreakdown, date },
+          options.client,
+        );
+
   const markdown = renderBriefMarkdown(
     insightsWithDates,
     date,
@@ -225,6 +252,7 @@ export function writeBrief(options: BriefOptions): { path: string; insightCount:
     recurrenceChains,
     crossProjectRollup,
     effortBreakdown,
+    narrative,
   );
 
   // Create directory and write file
