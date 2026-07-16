@@ -22,11 +22,22 @@ export interface ProjectRollup {
   insightCount: number;
 }
 
+export interface EffortBreakdown {
+  toil: number;
+  judgment: number;
+  overhead: number;
+  total: number;
+  toilRatio: number;
+  judgmentRatio: number;
+  overheadRatio: number;
+}
+
 export interface AnalyticsSnapshot {
   categoryTrend: CategoryTrendPoint[];
   topInsights: TopInsight[];
   recurrenceChains: RecurrenceChain[];
   crossProjectRollup: ProjectRollup[];
+  effortBreakdown: EffortBreakdown;
 }
 
 function localDateKey(ms: number): string {
@@ -71,7 +82,7 @@ export function getTopInsights(db: Database.Database, date: string, limit: numbe
       `
     SELECT
       i.id, i.episode_id, i.category, i.text, i.evidence_ref, i.significance_score,
-      i.verified_by_git, i.recurrence_of, i.created_at, e.project_dir
+      i.effort_class, i.verified_by_git, i.recurrence_of, i.created_at, e.project_dir
     FROM insights i
     JOIN episodes e ON i.episode_id = e.id
     WHERE e.date = ?
@@ -86,6 +97,7 @@ export function getTopInsights(db: Database.Database, date: string, limit: numbe
     text: string;
     evidence_ref: string;
     significance_score: number;
+    effort_class: string;
     verified_by_git: boolean | null;
     recurrence_of: number | null;
     created_at: string;
@@ -100,6 +112,7 @@ export function getTopInsights(db: Database.Database, date: string, limit: numbe
       text: row.text,
       evidenceRef: row.evidence_ref,
       significanceScore: row.significance_score,
+      effortClass: row.effort_class,
       verifiedByGit: row.verified_by_git ? true : null,
       recurrenceOf: row.recurrence_of,
       createdAt: row.created_at,
@@ -118,7 +131,7 @@ export function getRecurrenceChains(db: Database.Database, days: number): Recurr
       `
     SELECT
       i.id, i.episode_id, i.category, i.text, i.evidence_ref, i.significance_score,
-      i.verified_by_git, i.recurrence_of, i.created_at, e.date
+      i.effort_class, i.verified_by_git, i.recurrence_of, i.created_at, e.date
     FROM insights i
     JOIN episodes e ON i.episode_id = e.id
     WHERE e.date >= ?
@@ -131,6 +144,7 @@ export function getRecurrenceChains(db: Database.Database, days: number): Recurr
     text: string;
     evidence_ref: string;
     significance_score: number;
+    effort_class: string;
     verified_by_git: boolean | null;
     recurrence_of: number | null;
     created_at: string;
@@ -179,7 +193,7 @@ export function getRecurrenceChains(db: Database.Database, days: number): Recurr
             `
           SELECT
             i.id, i.episode_id, i.category, i.text, i.evidence_ref, i.significance_score,
-            i.verified_by_git, i.recurrence_of, i.created_at, e.date
+            i.effort_class, i.verified_by_git, i.recurrence_of, i.created_at, e.date
           FROM insights i
           JOIN episodes e ON i.episode_id = e.id
           WHERE i.id = ?
@@ -247,7 +261,7 @@ export function getRecurrenceChains(db: Database.Database, days: number): Recurr
               `
             SELECT
               i.id, i.episode_id, i.category, i.text, i.evidence_ref, i.significance_score,
-              i.verified_by_git, i.recurrence_of, i.created_at, e.date
+              i.effort_class, i.verified_by_git, i.recurrence_of, i.created_at, e.date
             FROM insights i
             JOIN episodes e ON i.episode_id = e.id
             WHERE i.id = ?
@@ -263,6 +277,7 @@ export function getRecurrenceChains(db: Database.Database, days: number): Recurr
           text: row.text,
           evidenceRef: row.evidence_ref,
           significanceScore: row.significance_score,
+          effortClass: row.effort_class,
           verifiedByGit: row.verified_by_git ? true : null,
           recurrenceOf: row.recurrence_of,
           createdAt: row.created_at,
@@ -291,6 +306,49 @@ export function getRecurrenceChains(db: Database.Database, days: number): Recurr
   }
 
   return result.sort((a, b) => b.insights.length - a.insights.length);
+}
+
+/**
+ * The "how much of this was donkey work" metric: what fraction of a day's
+ * insights came from toil (mechanical/repetitive work that shouldn't have
+ * needed a human more than once) versus judgment (real skilled reasoning)
+ * versus overhead (necessary but zero-signal cost). Counts insights, not
+ * time — a duration-weighted version (using episode line-spans) is a
+ * natural follow-up once this is validated as useful.
+ */
+export function getEffortBreakdown(db: Database.Database, date: string): EffortBreakdown {
+  const rows = db
+    .prepare(
+      `
+    SELECT i.effort_class, COUNT(*) as count
+    FROM insights i
+    JOIN episodes e ON i.episode_id = e.id
+    WHERE e.date = ?
+    GROUP BY i.effort_class
+  `,
+    )
+    .all(date) as Array<{ effort_class: string; count: number }>;
+
+  const counts = { toil: 0, judgment: 0, overhead: 0 };
+  for (const row of rows) {
+    if (
+      row.effort_class === 'toil' ||
+      row.effort_class === 'judgment' ||
+      row.effort_class === 'overhead'
+    ) {
+      counts[row.effort_class] = row.count;
+    }
+  }
+
+  const total = counts.toil + counts.judgment + counts.overhead;
+
+  return {
+    ...counts,
+    total,
+    toilRatio: total > 0 ? counts.toil / total : 0,
+    judgmentRatio: total > 0 ? counts.judgment / total : 0,
+    overheadRatio: total > 0 ? counts.overhead / total : 0,
+  };
 }
 
 export function getCrossProjectRollup(db: Database.Database, date: string): ProjectRollup[] {
