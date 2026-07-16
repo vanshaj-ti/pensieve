@@ -1,9 +1,41 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import Database from 'better-sqlite3';
-import { cosineSimilarity, applyEmbeddingRecurrence } from '../src/extract/recurrence.js';
+import {
+  cosineSimilarity,
+  applyEmbeddingRecurrence,
+  dedupeInsightsByEmbedding,
+  type InsightWithEmbedding,
+} from '../src/extract/recurrence.js';
 import { type Config } from '../src/config.js';
 import { initSchema } from '../src/db/schema.js';
 import { type Insight } from '../src/types.js';
+
+/**
+ * getRecentInsightEmbeddings filters on a real `now - days` cutoff (not a
+ * fixed test fixture date), so any test exercising that real query path
+ * must seed rows within the actual lookback window — a fixed 2024 date
+ * silently falls outside a "last 7 days" cutoff computed against the real
+ * clock and makes recentEmbeddings empty regardless of similarity.
+ */
+function recentIso(daysAgo: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - daysAgo);
+  return d.toISOString();
+}
+
+function makeInsight(overrides: Partial<Insight> = {}): Insight {
+  return {
+    episodeId: 1,
+    category: 'strategic_value',
+    text: 'test insight',
+    evidenceRef: 'line 1',
+    significanceScore: 3,
+    verifiedByGit: null,
+    recurrenceOf: null,
+    createdAt: '2024-01-01T00:00:00Z',
+    ...overrides,
+  };
+}
 
 describe('cosineSimilarity', () => {
   it('returns 1 for identical vectors', () => {
@@ -151,5 +183,137 @@ describe('applyEmbeddingRecurrence', () => {
     const result = await applyEmbeddingRecurrence(insights, db, config);
     expect(result[0].insight.recurrenceOf).toBe(5); // Preserved
     expect(result[0].embedding).toBeNull();
+  });
+
+  it('enabled path: real fetch-backed embedding above threshold sets recurrenceOf', async () => {
+    // Prior insight stored with an embedding pointing along [1, 0].
+    const oldInsight = db
+      .prepare(`
+        INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+      .run(1, 'friction_audit', 'old friction', 'line 1', 3, null, null, recentIso(1));
+    const oldId = oldInsight.lastInsertRowid as number;
+    db.prepare(`
+      INSERT INTO insight_embeddings (insight_id, embedding, model, created_at)
+      VALUES (?, ?, ?, ?)
+    `).run(oldId, Buffer.from(new Float32Array([1, 0]).buffer), 'text-embedding-3-small', recentIso(1));
+
+    // Mock fetch so embedText (enabled: embeddingsBaseUrl set) returns a
+    // vector highly similar to the stored one — this exercises the actual
+    // enabled code path (embedText -> cosineSimilarity -> recurrenceOf
+    // override), not just the cosineSimilarity function in isolation.
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ embedding: [0.98, 0.02], index: 0 }] }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const newInsight: Insight = {
+      episodeId: 1,
+      category: 'friction_audit',
+      text: 'new friction, same root cause',
+      evidenceRef: 'line 9',
+      significanceScore: 3,
+      verifiedByGit: null,
+      recurrenceOf: null,
+      createdAt: '2024-01-02T00:00:00Z',
+    };
+
+    const result = await applyEmbeddingRecurrence([newInsight], db, baseConfig);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(result).toHaveLength(1);
+    expect(result[0].insight.recurrenceOf).toBe(oldId);
+    expect(result[0].embedding).toEqual([0.98, 0.02]);
+
+    vi.unstubAllGlobals();
+  });
+
+  it('enabled path: low-similarity embedding does not set recurrenceOf', async () => {
+    const oldInsight = db
+      .prepare(`
+        INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+      .run(1, 'friction_audit', 'unrelated old insight', 'line 1', 3, null, null, recentIso(1));
+    const oldId = oldInsight.lastInsertRowid as number;
+    db.prepare(`
+      INSERT INTO insight_embeddings (insight_id, embedding, model, created_at)
+      VALUES (?, ?, ?, ?)
+    `).run(oldId, Buffer.from(new Float32Array([1, 0]).buffer), 'text-embedding-3-small', recentIso(1));
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ embedding: [0, 1], index: 0 }] }), // orthogonal
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const newInsight: Insight = {
+      episodeId: 1,
+      category: 'strategic_value',
+      text: 'genuinely different insight',
+      evidenceRef: 'line 9',
+      significanceScore: 3,
+      verifiedByGit: null,
+      recurrenceOf: null,
+      createdAt: '2024-01-02T00:00:00Z',
+    };
+
+    const result = await applyEmbeddingRecurrence([newInsight], db, baseConfig);
+    expect(result[0].insight.recurrenceOf).toBeNull();
+
+    vi.unstubAllGlobals();
+  });
+});
+
+describe('dedupeInsightsByEmbedding', () => {
+  const threshold = 0.9;
+
+  function withEmbedding(insight: Insight, embedding: number[] | null): InsightWithEmbedding {
+    return { insight, embedding };
+  }
+
+  it('merges two near-duplicate insights, keeping the higher-significance one', () => {
+    const low = withEmbedding(makeInsight({ text: 'a', significanceScore: 2 }), [1, 0]);
+    const high = withEmbedding(makeInsight({ text: 'b', significanceScore: 4 }), [0.99, 0.01]);
+
+    const result = dedupeInsightsByEmbedding([low, high], threshold);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].insight.significanceScore).toBe(4);
+    expect(result[0].insight.text).toBe('b');
+  });
+
+  it('keeps dissimilar insights separate', () => {
+    const a = withEmbedding(makeInsight({ text: 'a' }), [1, 0]);
+    const b = withEmbedding(makeInsight({ text: 'b' }), [0, 1]);
+
+    const result = dedupeInsightsByEmbedding([a, b], threshold);
+    expect(result).toHaveLength(2);
+  });
+
+  it('never merges items with a null embedding, even if text is identical', () => {
+    const a = withEmbedding(makeInsight({ text: 'same text' }), null);
+    const b = withEmbedding(makeInsight({ text: 'same text' }), null);
+
+    const result = dedupeInsightsByEmbedding([a, b], threshold);
+    expect(result).toHaveLength(2);
+  });
+
+  it('collapses a cluster of 3+ near-duplicates into one survivor', () => {
+    const items = [
+      withEmbedding(makeInsight({ text: 'v1', significanceScore: 2 }), [1, 0, 0]),
+      withEmbedding(makeInsight({ text: 'v2', significanceScore: 5 }), [0.99, 0.01, 0]),
+      withEmbedding(makeInsight({ text: 'v3', significanceScore: 3 }), [0.98, 0.02, 0]),
+    ];
+
+    const result = dedupeInsightsByEmbedding(items, threshold);
+    expect(result).toHaveLength(1);
+    expect(result[0].insight.significanceScore).toBe(5);
+  });
+
+  it('empty input returns empty output', () => {
+    expect(dedupeInsightsByEmbedding([], threshold)).toEqual([]);
   });
 });
