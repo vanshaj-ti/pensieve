@@ -21,14 +21,16 @@ export class HaikuExtractionError extends Error {
 const SYSTEM_PROMPT = `You are an insight extraction system. Your task is to identify actionable insights from development session transcripts.
 
 Extract insights that fall into one of these categories:
-- strategic_value: Important decisions, architectural insights, or long-term strategic value
-- decision_record: Key decisions made, their rationale, and implications
-- friction_audit: Pain points, bottlenecks, inefficiencies, or obstacles encountered
-- high_potential_seeds: Ideas, opportunities, or features with high potential impact
-- ai_leverage: Opportunities to use AI to improve development velocity or quality
-- ai_correction_load: Instances where the user had to correct AI output, signaling limitation areas
+- strategic_value: Insights that change how you'd build or prioritize something long-term — NOT "task X completed", even if X sounds architectural.
+- decision_record: An explicit choice was made, with a stated reason ("we chose X over Y because Z") or a clear alternative considered. Not just an action taken — the reasoning behind it.
+- friction_audit: A blocker, error, retry, or something that wasted time or caused frustration. Evidence should be something that broke or slowed work down.
+- high_potential_seeds: A future-tense or speculative idea the user expressed but has not yet acted on — "what if we...", "we could later...". Not something already built.
+- ai_leverage: The AI did something non-trivially useful that saved significant time or effort — not just "AI was used," but a concrete instance of leverage.
+- ai_correction_load: The user corrected AI output, re-ran something because the AI got it wrong, or caught an AI mistake. Must be AI-specific, not general human error.
 
-Be high-recall: over-include candidates rather than being conservative. False positives are filtered in downstream verification; false negatives are permanent misses.
+Exclude entirely, in every category: pure status/progress narration — "run completed successfully", "N tests passing", "PR merged", "build clean". These describe that something happened, not what should be learned or acted on from it. Do not emit a candidate for these even at low confidence; they are not borderline, they are out of scope.
+
+Be high-recall on genuine insights: over-include candidates rather than being conservative. False positives are filtered in downstream verification; false negatives are permanent misses. This does not extend to status narration, which should never be emitted regardless of recall settings.
 
 For each insight, provide:
 - category: One of the six categories above

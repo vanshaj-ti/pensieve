@@ -34,14 +34,40 @@ You receive:
 1. Candidate insights extracted from today's sessions (indexed with episodeId, category, text, evidenceRef, evidenceSnippet)
 2. Recent history of previously stored insights (from the last 5-7 days)
 
-Your task:
-1. **Reject hallucinations**: For each candidate, verify that the evidenceSnippet actually supports the claimed insight. If it doesn't substantiate the claim, reject it.
-2. **Merge duplicates**: Identify and merge near-duplicate candidates into single insights.
-3. **Score significance**: Assign a significance score (1-5 scale, where 1 = trivial/peripheral, 5 = critical/transformative). Use this to prioritize insights in downstream processing.
-4. **Polish text**: Refine the insight text to be clear, concise, and actionable.
-5. **Flag recurrence**: Compare against recent history. If today's insight closely matches a previous insight, set recurrenceOf to that insight's id. Otherwise set it to null.
+Note: exact-duplicate collapsing and cross-day recurrence linking already
+happen downstream via embedding similarity — you do not need to solve those
+yourself. Your job is the judgment calls embeddings can't make: rejecting
+hallucinated/unsupported candidates, merging candidates that describe the
+same underlying fact in different words (embeddings catch near-identical
+text; you catch same-meaning-different-phrasing), and scoring significance
+with real discrimination between levels.
 
-Output only approved insights with all fields populated.`;
+Your task:
+1. **Hard-exclude status/progress noise.** A candidate that merely reports
+   an event happened — "session completed successfully", "N tests passing",
+   "run X finished", "PR merged" — is NOT an insight, even if it mentions
+   architecture, decisions, or strategy in passing. An insight has to say
+   something that changes what the reader would do or believe next time;
+   a status update does not. Reject these outright, do not lower their
+   score — they should not appear in the output at all.
+   - Negative example (REJECT): "Pensieve scaffold (run 1) completed and
+     approved: TS project setup, SQLite schema, 12 passing tests, clean
+     lint/build." — this is a log line, not an insight.
+   - Positive example (KEEP): "Two-pass extraction architecture locked:
+     Haiku does cheap high-recall candidate generation; Sonnet verifies
+     once daily in batch." — this is a decision with a stated rationale,
+     not a status report.
+2. **Reject hallucinations**: For each candidate, verify that the evidenceSnippet actually supports the claimed insight. If it doesn't substantiate the claim, reject it.
+3. **Merge same-meaning duplicates**: Identify candidates that describe the same underlying fact in different phrasing and merge them into one insight.
+4. **Score significance using this rubric** (1-5, be discriminating — do not default to the middle):
+   - 1 = cosmetic/trivial; no reader action implied.
+   - 2 = minor; low impact, worth a footnote.
+   - 3 = moderate; worth noting, not urgent, no immediate action needed.
+   - 4 = significant; actionable, affects reliability/correctness/velocity.
+   - 5 = critical; production bug, data loss, security issue, or a decision that changes the architecture.
+5. **Polish text**: Refine the insight text to be clear, concise, and actionable.
+
+Output only approved insights with all fields populated. recurrenceOf may be left null for every candidate — the embedding-based recurrence pass downstream will set it independently; do not spend effort guessing it from the pasted history.`;
 
 export async function verifyAndScore(
   candidatesWithSource: CandidateWithSource[],
@@ -88,6 +114,7 @@ Process these candidates: reject hallucinations, merge near-duplicates, score si
       {
         type: 'text',
         text: SONNET_SYSTEM_PROMPT,
+        cache_control: { type: 'ephemeral' },
       },
     ],
     tools: [

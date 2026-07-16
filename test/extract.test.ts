@@ -761,6 +761,62 @@ describe('Extract: Orchestration', () => {
     expect(mockCreate).toHaveBeenCalledTimes(2);
   });
 
+  it('Case 8: Haiku episodes run concurrently, capped at HAIKU_CONCURRENCY, not sequentially', async () => {
+    const episodeCount = 12; // > HAIKU_CONCURRENCY (5), enough to exercise the pool refilling
+    const episodes: PersistedEpisode[] = Array.from({ length: episodeCount }, (_, i) => ({
+      id: i + 1,
+      date: '2026-07-15',
+      projectDir: '/project',
+      sessionId: `sess-${i + 1}`,
+      startLine: i + 1,
+      endLine: i + 1,
+      lines: [
+        {
+          lineNumber: i + 1,
+          type: 'user' as const,
+          timestamp: '2026-07-15T10:00:00Z',
+          hasToolUse: false,
+          raw: {
+            type: 'user',
+            timestamp: '2026-07-15T10:00:00Z',
+            message: { content: `episode ${i + 1}` },
+          },
+        },
+      ],
+    }));
+
+    let inFlight = 0;
+    let maxInFlight = 0;
+    let haikuCallCount = 0;
+
+    mockCreate.mockImplementation(async (args: { tools?: Array<{ name: string }> }) => {
+      const isHaikuCall = args.tools?.[0]?.name === 'emit_candidates';
+      if (isHaikuCall) {
+        haikuCallCount++;
+        inFlight++;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        // Yield control so overlapping calls actually interleave instead of
+        // resolving synchronously in submission order.
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        inFlight--;
+        return {
+          content: [{ type: 'tool_use', name: 'emit_candidates', input: { candidates: [] } }],
+        };
+      }
+      // Sonnet call — no candidates were produced, so this shouldn't be reached,
+      // but return a valid empty response just in case.
+      return {
+        content: [{ type: 'tool_use', name: 'emit_insights', input: { insights: [] } }],
+      };
+    });
+
+    await runExtraction(episodes, db, client);
+
+    expect(haikuCallCount).toBe(episodeCount);
+    expect(maxInFlight).toBeGreaterThan(1); // genuinely concurrent, not sequential
+    expect(maxInFlight).toBeLessThanOrEqual(5); // respects HAIKU_CONCURRENCY
+  });
+
   it('Empty candidates return empty insights', async () => {
     const episodes: PersistedEpisode[] = [
       {
