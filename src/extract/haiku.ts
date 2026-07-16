@@ -107,7 +107,7 @@ export async function generateCandidates(
     // real `this` binding.
     const response = (await client.beta.promptCaching.messages.create({
       model: 'claude-haiku-4-5',
-      max_tokens: 2048,
+      max_tokens: 8192,
       system: [
         {
           type: 'text',
@@ -170,7 +170,10 @@ export async function generateCandidates(
     }
 
     if (typeof toolUse.input !== 'object' || toolUse.input === null || !('candidates' in toolUse.input)) {
-      throw new Error('Tool input missing candidates field');
+      throw new Error(
+        `Tool input missing candidates field (stop_reason: ${(response as any).stop_reason}) — ` +
+          'likely truncated by max_tokens if stop_reason is "max_tokens"',
+      );
     }
 
     const candidates = toolUse.input.candidates;

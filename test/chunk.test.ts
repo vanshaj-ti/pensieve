@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { ParsedLine } from '../src/ingest/parser.js';
 import type { Config } from '../src/config.js';
-import { bucketByDay, splitEpisodes } from '../src/chunk/episodes.js';
+import { bucketByDay, splitEpisodes, MAX_EPISODE_TOKENS } from '../src/chunk/episodes.js';
 import { chunkSession } from '../src/chunk/index.js';
 
 function createLine(
@@ -206,6 +206,49 @@ describe('splitEpisodes', () => {
     const reconstructed = result.flatMap((ep) => ep.lines);
     expect(reconstructed).toEqual(lines);
     expect(reconstructed.map((l) => l.lineNumber)).toEqual([1, 2, 3, 4]);
+  });
+
+  it('splits an oversized episode into multiple token-budget-respecting pieces', () => {
+    const base = new Date(2026, 6, 15, 10, 0, 0);
+    // Each line's raw content is ~1000 chars (~250 tokens). 1000 lines
+    // pushes one no-gap episode to ~250k estimated tokens, well over
+    // MAX_EPISODE_TOKENS, forcing a split even though nothing here
+    // triggers an idle-gap or compaction boundary.
+    const bigContent = 'x'.repeat(1000);
+    const lines: ParsedLine[] = [];
+    for (let i = 1; i <= 1000; i++) {
+      const ts = new Date(base.getTime() + i * 1000).toISOString();
+      lines.push({
+        lineNumber: i,
+        type: 'user',
+        timestamp: ts,
+        hasToolUse: false,
+        raw: { type: 'user', content: bigContent },
+      });
+    }
+
+    const result = splitEpisodes(lines, defaultConfig);
+    expect(result.length).toBeGreaterThan(1);
+
+    // No data lost, no reordering, no overlap.
+    const reconstructed = result.flatMap((ep) => ep.lines);
+    expect(reconstructed).toEqual(lines);
+
+    // Every piece fits under the token budget (or is an irreducible single line).
+    for (const ep of result) {
+      const estTokens = Math.ceil(JSON.stringify(ep.lines.map((l) => l.raw)).length / 4);
+      expect(ep.lines.length === 1 || estTokens <= MAX_EPISODE_TOKENS).toBe(true);
+    }
+  });
+
+  it('does not split a small episode that fits comfortably under the token budget', () => {
+    const d1 = new Date(2026, 6, 15, 10, 0, 0);
+    const d2 = new Date(2026, 6, 15, 10, 1, 0);
+    const lines = [createLine(1, 'user', d1.toISOString()), createLine(2, 'assistant', d2.toISOString())];
+
+    const result = splitEpisodes(lines, defaultConfig);
+    expect(result).toHaveLength(1);
+    expect(result[0].lines).toEqual(lines);
   });
 });
 

@@ -83,7 +83,7 @@ Process these candidates: reject hallucinations, merge near-duplicates, score si
   // function reference — casting the method strips its `this` binding.
   const response = (await client.beta.promptCaching.messages.create({
     model: 'claude-sonnet-5',
-    max_tokens: 4096,
+    max_tokens: 16384,
     system: [
       {
         type: 'text',
@@ -147,7 +147,10 @@ Process these candidates: reject hallucinations, merge near-duplicates, score si
   }
 
   if (typeof toolUse.input !== 'object' || toolUse.input === null || !('insights' in toolUse.input)) {
-    throw new Error('Tool input missing insights field');
+    throw new Error(
+      `Tool input missing insights field (stop_reason: ${(response as any).stop_reason}) — ` +
+        'likely truncated by max_tokens if stop_reason is "max_tokens"',
+    );
   }
 
   const insights = toolUse.input.insights;
