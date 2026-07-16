@@ -81,7 +81,10 @@ function splitByTokenBudget(
     lines: right,
   };
 
-  return [...splitByTokenBudget(leftEpisode, maxTokens), ...splitByTokenBudget(rightEpisode, maxTokens)];
+  return [
+    ...splitByTokenBudget(leftEpisode, maxTokens),
+    ...splitByTokenBudget(rightEpisode, maxTokens),
+  ];
 }
 
 export function splitEpisodes(

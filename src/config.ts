@@ -41,7 +41,7 @@ function defaultConfig(): Config {
     embeddingsAuthScheme: 'Bearer',
     embeddingsExtraHeaders: {},
     embeddingsPath: '/v1/embeddings',
-    recurrenceSimilarityThreshold: 0.90,
+    recurrenceSimilarityThreshold: 0.9,
   };
 }
 

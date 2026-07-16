@@ -27,10 +27,7 @@ const NOISE_TYPES = new Set([
   'ai-title',
 ]);
 
-export async function parseSessionLines(
-  filePath: string,
-  startLine = 0,
-): Promise<ParseResult> {
+export async function parseSessionLines(filePath: string, startLine = 0): Promise<ParseResult> {
   const lines: ParsedLine[] = [];
   let maxLineNumber = 0;
   let lineNumber = 0;
@@ -87,9 +84,7 @@ export async function parseSessionLines(
         raw: parsed,
       });
     } else if (!NOISE_TYPES.has(type || '')) {
-      console.warn(
-        `[parser] ${filePath}:${lineNumber} unknown type "${type}", skipping`,
-      );
+      console.warn(`[parser] ${filePath}:${lineNumber} unknown type "${type}", skipping`);
     }
   }
 

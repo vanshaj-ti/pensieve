@@ -119,7 +119,14 @@ Process these candidates: reject hallucinations, merge near-duplicates, score si
                   significanceScore: { type: 'number' },
                   recurrenceOf: { type: ['number', 'null'] },
                 },
-                required: ['episodeId', 'category', 'text', 'evidenceRef', 'significanceScore', 'recurrenceOf'],
+                required: [
+                  'episodeId',
+                  'category',
+                  'text',
+                  'evidenceRef',
+                  'significanceScore',
+                  'recurrenceOf',
+                ],
               },
             },
           },
@@ -146,7 +153,11 @@ Process these candidates: reject hallucinations, merge near-duplicates, score si
     throw new Error(`Expected tool_use named emit_insights, got ${toolUse.name}`);
   }
 
-  if (typeof toolUse.input !== 'object' || toolUse.input === null || !('insights' in toolUse.input)) {
+  if (
+    typeof toolUse.input !== 'object' ||
+    toolUse.input === null ||
+    !('insights' in toolUse.input)
+  ) {
     throw new Error(
       `Tool input missing insights field (stop_reason: ${(response as any).stop_reason}) — ` +
         'likely truncated by max_tokens if stop_reason is "max_tokens"',

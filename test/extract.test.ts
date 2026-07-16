@@ -178,7 +178,11 @@ describe('Extract: Haiku Pass', () => {
             message: {
               content: [
                 { type: 'text', text: 'I can help.' },
-                { type: 'tool_use', name: 'file_editor', input: { action: 'write', path: 'src/index.ts' } },
+                {
+                  type: 'tool_use',
+                  name: 'file_editor',
+                  input: { action: 'write', path: 'src/index.ts' },
+                },
                 { type: 'tool_result', content: 'File written successfully' },
               ],
             },

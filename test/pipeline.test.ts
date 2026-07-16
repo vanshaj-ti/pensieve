@@ -240,10 +240,12 @@ describe('pipeline', () => {
 
   it('dry-run skips persistence and cursor advancement', async () => {
     // Pre-populate sessions table
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO sessions (project_dir, session_id, last_line, last_run_at)
       VALUES ('/tmp/project', 'session-1', 0, NULL)
-    `).run();
+    `,
+    ).run();
 
     const now = new Date().toISOString();
     const scanResult: ScanResult = {
@@ -293,7 +295,9 @@ describe('pipeline', () => {
     expect(cursor).toBe(0);
 
     // No rows should be persisted
-    const episodeCount = db.prepare('SELECT COUNT(*) as count FROM episodes').get() as { count: number };
+    const episodeCount = db.prepare('SELECT COUNT(*) as count FROM episodes').get() as {
+      count: number;
+    };
     expect(episodeCount.count).toBe(0);
   });
 
@@ -339,7 +343,9 @@ describe('pipeline', () => {
       force: false,
     });
 
-    const count = db.prepare('SELECT COUNT(*) as count FROM insight_embeddings').get() as { count: number };
+    const count = db.prepare('SELECT COUNT(*) as count FROM insight_embeddings').get() as {
+      count: number;
+    };
     expect(count.count).toBe(0);
   });
 });

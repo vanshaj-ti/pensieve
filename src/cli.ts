@@ -9,7 +9,9 @@ import { localDateKey } from './chunk/episodes.js';
 
 const program = new Command();
 
-program.name('pensieve').description('Mines Claude Code session transcripts for daily insight briefs.');
+program
+  .name('pensieve')
+  .description('Mines Claude Code session transcripts for daily insight briefs.');
 
 export interface AnalyzeCommandOptions {
   force?: boolean;
@@ -82,7 +84,9 @@ export async function runAnalyzeCommand(opts: AnalyzeCommandOptions): Promise<vo
           `brief(s) written to ${briefList}`,
       );
     } else {
-      console.log(`Processed ${result.sessionsProcessed} ${pluralSession}, ${result.insightsPersisted} ${pluralInsight}`);
+      console.log(
+        `Processed ${result.sessionsProcessed} ${pluralSession}, ${result.insightsPersisted} ${pluralInsight}`,
+      );
     }
 
     if (result.sessionsFailed > 0) {
@@ -97,11 +101,14 @@ export async function runAnalyzeCommand(opts: AnalyzeCommandOptions): Promise<vo
 
 program
   .command('analyze')
-  .description('Run the ingestion/extraction pipeline and update today\'s brief.')
+  .description("Run the ingestion/extraction pipeline and update today's brief.")
   .option('--force', 'Bypass cursor checks for backfill')
   .option('--date <YYYY-MM-DD>', 'Analyze/write brief for a specific past day')
   .option('--dry-run', 'Run extraction without persisting or advancing cursor')
-  .option('--project <projectDir>', 'Scope to one project (sanitized dir name under ~/.claude/projects/)')
+  .option(
+    '--project <projectDir>',
+    'Scope to one project (sanitized dir name under ~/.claude/projects/)',
+  )
   .option('--session <sessionId>', 'Scope to one session within --project (filename minus .jsonl)')
   .action(async (opts: AnalyzeCommandOptions) => {
     await runAnalyzeCommand(opts);

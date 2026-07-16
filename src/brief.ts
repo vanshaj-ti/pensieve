@@ -120,9 +120,11 @@ export function writeBrief(options: BriefOptions): { path: string; insightCount:
     if (insightDateCache.has(insightId)) {
       return insightDateCache.get(insightId)!;
     }
-    const row = db.prepare('SELECT e.date FROM insights i JOIN episodes e ON i.episode_id = e.id WHERE i.id = ?').get(insightId) as
-      | { date: string }
-      | undefined;
+    const row = db
+      .prepare(
+        'SELECT e.date FROM insights i JOIN episodes e ON i.episode_id = e.id WHERE i.id = ?',
+      )
+      .get(insightId) as { date: string } | undefined;
     if (row) {
       insightDateCache.set(insightId, row.date);
       return row.date;

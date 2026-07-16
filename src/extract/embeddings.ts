@@ -9,7 +9,9 @@ let warnedAboutFetchError = false;
 export async function embedText(text: string, config: Config): Promise<number[] | null> {
   if (!config.embeddingsBaseUrl || !config.embeddingsApiKey) {
     if (!warnedAboutDisabled) {
-      console.warn('Embeddings not configured (PENSIEVE_EMBEDDINGS_BASE_URL/PENSIEVE_EMBEDDINGS_API_KEY unset); falling back to prompt-stuffing recurrence detection');
+      console.warn(
+        'Embeddings not configured (PENSIEVE_EMBEDDINGS_BASE_URL/PENSIEVE_EMBEDDINGS_API_KEY unset); falling back to prompt-stuffing recurrence detection',
+      );
       warnedAboutDisabled = true;
     }
     return null;
@@ -38,7 +40,9 @@ export async function embedText(text: string, config: Config): Promise<number[] 
 
     if (!resp.ok) {
       if (!warnedAboutHttpError) {
-        console.error(`Embeddings HTTP error ${resp.status} from ${url} (further embeddings HTTP errors this run will be suppressed)`);
+        console.error(
+          `Embeddings HTTP error ${resp.status} from ${url} (further embeddings HTTP errors this run will be suppressed)`,
+        );
         warnedAboutHttpError = true;
       }
       return null;
@@ -49,7 +53,10 @@ export async function embedText(text: string, config: Config): Promise<number[] 
 
     if (!parsed.success) {
       if (!warnedAboutParseError) {
-        console.error('Embeddings response schema validation failed (further parse errors this run will be suppressed)', parsed.error);
+        console.error(
+          'Embeddings response schema validation failed (further parse errors this run will be suppressed)',
+          parsed.error,
+        );
         warnedAboutParseError = true;
       }
       return null;
@@ -58,7 +65,10 @@ export async function embedText(text: string, config: Config): Promise<number[] 
     return parsed.data.data[0].embedding;
   } catch (err) {
     if (!warnedAboutFetchError) {
-      console.error('Embeddings fetch error (further fetch errors this run will be suppressed):', err instanceof Error ? err.message : String(err));
+      console.error(
+        'Embeddings fetch error (further fetch errors this run will be suppressed):',
+        err instanceof Error ? err.message : String(err),
+      );
       warnedAboutFetchError = true;
     }
     return null;
