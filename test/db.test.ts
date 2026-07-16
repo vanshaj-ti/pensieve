@@ -38,10 +38,32 @@ describe('initSchema', () => {
     );
   });
 
-  it('episodes has expected columns', () => {
+  it('episodes has expected columns including label', () => {
     expect(columnNames('episodes')).toEqual(
-      expect.arrayContaining(['id', 'date', 'project_dir', 'session_id', 'start_line', 'end_line']),
+      expect.arrayContaining([
+        'id',
+        'date',
+        'project_dir',
+        'session_id',
+        'start_line',
+        'end_line',
+        'label',
+      ]),
     );
+  });
+
+  it('backfills label with default empty string for pre-existing rows', () => {
+    db.prepare(
+      `
+      INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
+      VALUES ('2024-01-01', '/tmp', 'sess1', 1, 10)
+    `,
+    ).run();
+
+    const row = db.prepare('SELECT label FROM episodes WHERE session_id = ?').get('sess1') as {
+      label: string;
+    };
+    expect(row.label).toBe('');
   });
 
   it('insights has expected columns including reserved verified_by_git and recurrence_of', () => {

@@ -19,6 +19,15 @@ export interface PipelineOptions {
   projectFilter?: string;
   /** Scope ingestion to one session within projectFilter (see ScanOptions.sessionFilter). */
   sessionFilter?: string;
+  /** Tags every episode inserted by this run. Auto-generated (run-<timestamp>) if omitted. */
+  label?: string;
+}
+
+function defaultRunLabel(): string {
+  return `run-${new Date()
+    .toISOString()
+    .replace(/[-:]/g, '')
+    .replace(/\.\d+Z$/, 'Z')}`;
 }
 
 export interface PipelineResult {
@@ -44,6 +53,8 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
       apiKey: process.env.ANTHROPIC_API_KEY,
       baseURL: 'https://api.anthropic.com',
     });
+
+  const label = options.label ?? defaultRunLabel();
 
   const scanResults = await scanNewLines(db, {
     claudeProjectsDir: options.claudeProjectsDir,
@@ -125,8 +136,8 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
         ? db.transaction(() => {
             let totalInserts = 0;
             const insertEpisode = db.prepare(`
-              INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
-              VALUES (?, ?, ?, ?, ?)
+              INSERT INTO episodes (date, project_dir, session_id, start_line, end_line, label)
+              VALUES (?, ?, ?, ?, ?, ?)
             `);
             const insertInsight = db.prepare(`
               INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, effort_class, verified_by_git, recurrence_of, created_at)
@@ -148,6 +159,7 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
                   draft.sessionId,
                   draft.startLine,
                   draft.endLine,
+                  label,
                 );
                 tempToRealId.set(tempId, info.lastInsertRowid as number);
               }

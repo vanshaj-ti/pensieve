@@ -15,6 +15,10 @@ import {
   getEffortBreakdownTrend,
   getCrossProjectRollup,
   getRecurrenceChains,
+  getLabels,
+  getProjects,
+  getSessions,
+  getEffortByCategory,
 } from '../src/analytics/index.js';
 
 describe('dashboard server', () => {
@@ -215,6 +219,102 @@ describe('dashboard server', () => {
       expect(res.status).toBe(200);
       const text = await res.text();
       expect(text).toContain('Pensieve Dashboard');
+    });
+  });
+
+  describe('GET /api/labels', () => {
+    it('returns labels matching getLabels', async () => {
+      const res = await fetch(`http://localhost:${port}/api/labels`);
+      expect(res.status).toBe(200);
+      const apiData = await res.json();
+      const expected = getLabels(dbForAnalytics);
+      expect(apiData).toEqual(expected);
+    });
+  });
+
+  describe('GET /api/projects', () => {
+    it('returns projects matching getProjects', async () => {
+      const res = await fetch(`http://localhost:${port}/api/projects`);
+      expect(res.status).toBe(200);
+      const apiData = await res.json();
+      const expected = getProjects(dbForAnalytics);
+      expect(apiData).toEqual(expected);
+    });
+  });
+
+  describe('GET /api/sessions', () => {
+    it('returns sessions matching getSessions', async () => {
+      const res = await fetch(`http://localhost:${port}/api/sessions`);
+      expect(res.status).toBe(200);
+      const apiData = await res.json();
+      const expected = getSessions(dbForAnalytics);
+      expect(apiData).toEqual(expected);
+    });
+
+    it('scopes to a project when given', async () => {
+      const res = await fetch(`http://localhost:${port}/api/sessions?project=/project-a`);
+      expect(res.status).toBe(200);
+      const apiData = await res.json();
+      const expected = getSessions(dbForAnalytics, '/project-a');
+      expect(apiData).toEqual(expected);
+    });
+  });
+
+  describe('POST /api/labels', () => {
+    it('updates the label for a project+session and returns ok', async () => {
+      const res = await fetch(`http://localhost:${port}/api/labels`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectDir: '/project-a',
+          sessionId: 'session-1',
+          oldLabel: '',
+          label: 'renamed',
+        }),
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.ok).toBe(true);
+      expect(data.changes).toBeGreaterThan(0);
+    });
+
+    it('returns 400 when required fields are missing', async () => {
+      const res = await fetch(`http://localhost:${port}/api/labels`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectDir: '/project-a' }),
+      });
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe('filter query params on existing routes', () => {
+    it('/api/top-insights scopes to a project via the project query param', async () => {
+      const res = await fetch(
+        `http://localhost:${port}/api/top-insights?date=2026-07-15&limit=10&project=/project-b`,
+      );
+      expect(res.status).toBe(200);
+      const apiData = await res.json();
+      const expected = getTopInsights(dbForAnalytics, '2026-07-15', 10, {
+        projectDir: '/project-b',
+      });
+      expect(apiData).toEqual(expected);
+    });
+  });
+
+  describe('GET /api/effort-by-category', () => {
+    it('returns effort-by-category matching getEffortByCategory', async () => {
+      const date = '2026-07-15';
+      const res = await fetch(`http://localhost:${port}/api/effort-by-category?date=${date}`);
+      expect(res.status).toBe(200);
+      const apiData = await res.json();
+      const expected = getEffortByCategory(dbForAnalytics, date);
+      expect(apiData).toEqual(expected);
+    });
+
+    it('returns 400 for missing date', async () => {
+      const res = await fetch(`http://localhost:${port}/api/effort-by-category`);
+      expect(res.status).toBe(400);
     });
   });
 });

@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3';
 import { Insight, InsightSchema } from '../types.js';
-import { localDateKey } from './shared.js';
+import { localDateKey, buildFilterClause, type AnalyticsFilter } from './shared.js';
 
 export interface RecurrenceChain {
   rootId: number;
@@ -8,9 +8,14 @@ export interface RecurrenceChain {
   span: { firstDate: string; lastDate: string };
 }
 
-export function getRecurrenceChains(db: Database.Database, days: number): RecurrenceChain[] {
+export function getRecurrenceChains(
+  db: Database.Database,
+  days: number,
+  filter?: AnalyticsFilter,
+): RecurrenceChain[] {
   const cutoffMs = Date.now() - days * 86400000;
   const cutoffDate = localDateKey(cutoffMs);
+  const { sql: filterSql, params: filterParams } = buildFilterClause(filter);
 
   // Fetch all insights in the window
   const insightsInWindow = db
@@ -21,10 +26,10 @@ export function getRecurrenceChains(db: Database.Database, days: number): Recurr
       i.effort_class, i.verified_by_git, i.recurrence_of, i.created_at, e.date
     FROM insights i
     JOIN episodes e ON i.episode_id = e.id
-    WHERE e.date >= ?
+    WHERE e.date >= ?${filterSql}
   `,
     )
-    .all(cutoffDate) as Array<{
+    .all(cutoffDate, ...filterParams) as Array<{
     id: number;
     episode_id: number;
     category: string;

@@ -52,6 +52,15 @@ export function initSchema(db: Database.Database): void {
   if (!columns.some((c) => c.name === 'effort_class')) {
     db.exec(`ALTER TABLE insights ADD COLUMN effort_class TEXT NOT NULL DEFAULT 'judgment'`);
   }
+
+  // Same migration-guard pattern as effort_class above: identifies which
+  // pipeline run produced an episode ('' = unlabeled/pre-migration data).
+  const episodeColumns = db.prepare(`PRAGMA table_info(episodes)`).all() as Array<{
+    name: string;
+  }>;
+  if (!episodeColumns.some((c) => c.name === 'label')) {
+    db.exec(`ALTER TABLE episodes ADD COLUMN label TEXT NOT NULL DEFAULT ''`);
+  }
 }
 
 export function packEmbedding(vec: number[]): Buffer {

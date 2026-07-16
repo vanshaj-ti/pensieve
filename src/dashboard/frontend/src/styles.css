@@ -85,7 +85,7 @@ body {
 
 header {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   justify-content: space-between;
   margin-bottom: 20px;
   gap: 16px;
@@ -105,19 +105,26 @@ header .title-group p {
   margin-top: 2px;
 }
 
-.date-picker-section {
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.filter-section {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-.date-picker-section label {
+.filter-section label {
   font-size: 0.8rem;
   color: var(--text-muted);
   font-weight: 500;
 }
 
-.date-picker-section select {
+.filter-section select {
   padding: 7px 12px;
   border: 1px solid var(--border);
   border-radius: 9px;
@@ -125,62 +132,62 @@ header .title-group p {
   background: var(--surface);
   color: var(--text);
   cursor: pointer;
-  min-width: 150px;
+  /* Fixed width regardless of selected option's text length. */
+  width: 220px;
 }
 
-.date-picker-section select:focus {
+.filter-section select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.filter-section select:focus {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
 
-/* Tab navigation */
-.tab-nav {
+/* Breadcrumb */
+.breadcrumb {
   display: flex;
+  align-items: center;
   gap: 8px;
   margin-bottom: 24px;
-  border-bottom: 1px solid var(--border);
-  padding-bottom: 0;
+  font-size: 0.85rem;
 }
 
-.tab-button {
-  padding: 12px 16px;
+.crumb {
   border: none;
   background: transparent;
   color: var(--text-muted);
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   font-weight: 500;
   cursor: pointer;
-  border-bottom: 2px solid transparent;
-  transition: all 0.2s ease;
-  white-space: nowrap;
+  padding: 4px 0;
 }
 
-.tab-button:hover {
-  color: var(--text);
-}
-
-.tab-button.active {
+.crumb:hover,
+.crumb.active {
   color: var(--accent);
-  border-bottom-color: var(--accent);
 }
 
-/* Tab panels */
-.tab-panel {
-  display: none;
+.crumb-sep {
+  color: var(--text-faint);
 }
 
-.tab-panel.active {
+.crumb-current {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* Page layout grid */
+main.analytics-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 20px;
 }
 
-.tab-panel.active.span-full {
-  grid-template-columns: 1fr;
-}
-
 @media (max-width: 860px) {
-  .tab-panel.active {
+  main.analytics-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -190,7 +197,7 @@ header .title-group p {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 12px;
-  margin-bottom: 24px;
+  margin-bottom: 4px;
   grid-column: 1 / -1;
 }
 
@@ -227,11 +234,6 @@ header .title-group p {
   color: var(--overhead);
 }
 
-/* Layout grid */
-main {
-  display: contents;
-}
-
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -262,6 +264,18 @@ main {
   letter-spacing: 0;
 }
 
+.time-sink-callout {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.time-sink-callout strong {
+  color: var(--text);
+}
+
 .chart-container {
   position: relative;
   height: 260px;
@@ -277,6 +291,9 @@ ul.insight-list {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+ul.insight-list.scrollable {
   max-height: 420px;
   overflow-y: auto;
 }
@@ -341,9 +358,68 @@ ul.insight-list {
   border: 1px solid var(--border);
 }
 
-.insight-project {
+.insight-meta {
   font-size: 0.72rem;
   color: var(--text-faint);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sort-controls {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.sort-controls button {
+  border: 1px solid var(--border);
+  background: var(--surface-alt);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.sort-controls button.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: transparent;
+}
+
+.label-edit-btn {
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 0.72rem;
+  cursor: pointer;
+  padding: 0;
+}
+
+.label-edit-form {
+  display: inline-flex;
+  gap: 6px;
+  margin-left: 4px;
+}
+
+.label-edit-form input {
+  font-size: 0.72rem;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.label-edit-form button {
+  font-size: 0.72rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  padding: 2px 8px;
 }
 
 /* Recurrence chains */
@@ -486,10 +562,10 @@ tbody tr:hover {
 }
 
 /* Scrollbar polish (webkit) */
-ul.insight-list::-webkit-scrollbar {
+ul.insight-list.scrollable::-webkit-scrollbar {
   width: 6px;
 }
-ul.insight-list::-webkit-scrollbar-thumb {
+ul.insight-list.scrollable::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: 3px;
 }

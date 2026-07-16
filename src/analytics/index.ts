@@ -19,3 +19,5 @@ export * from './recurrenceChains.js';
 export * from './effortBreakdown.js';
 export * from './crossProjectRollup.js';
 export * from './insightDates.js';
+export * from './labels.js';
+export * from './effortByCategory.js';

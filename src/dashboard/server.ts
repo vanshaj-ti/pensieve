@@ -13,6 +13,12 @@ import {
   getEffortBreakdown,
   getInsightDates,
   getEffortBreakdownTrend,
+  getLabels,
+  getProjects,
+  getSessions,
+  updateLabelsForSession,
+  getEffortByCategory,
+  type AnalyticsFilter,
 } from '../analytics/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -36,17 +42,33 @@ function parsePositiveInt(value: string | undefined, defaultVal: number): number
   return num;
 }
 
+function parseFilter(req: Request): AnalyticsFilter {
+  const filter: AnalyticsFilter = {};
+  const label = req.query.label as string | undefined;
+  const project = req.query.project as string | undefined;
+  const session = req.query.session as string | undefined;
+  if (label !== undefined) filter.label = label;
+  if (project !== undefined) filter.projectDir = project;
+  if (session !== undefined) filter.sessionId = session;
+  return filter;
+}
+
 export function createDashboardServer(config: Config): Application {
   const app = express();
   const db = openDb(config.dbPath);
 
-  const publicDir = path.join(__dirname, 'public');
+  // Always resolves to the repo root's dist/dashboard/public, regardless of
+  // whether this file is running from src/dashboard (dev/test via tsx/vitest)
+  // or dist/dashboard (compiled) — both are two directories under repo root,
+  // and the Vite frontend only ever builds into dist/dashboard/public.
+  const publicDir = path.join(__dirname, '..', '..', 'dist', 'dashboard', 'public');
 
+  app.use(express.json());
   app.use(express.static(publicDir));
 
   app.get('/api/dates', (req: Request, res: Response) => {
     try {
-      const dates = getInsightDates(db);
+      const dates = getInsightDates(db, parseFilter(req));
       res.json(dates);
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch dates' });
@@ -61,7 +83,7 @@ export function createDashboardServer(config: Config): Application {
           .status(400)
           .json({ error: 'Invalid days parameter: must be a positive integer' });
       }
-      const trend = getCategoryTrend(db, days);
+      const trend = getCategoryTrend(db, days, parseFilter(req));
       res.json(trend);
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch category trend' });
@@ -82,7 +104,7 @@ export function createDashboardServer(config: Config): Application {
           .status(400)
           .json({ error: 'Invalid limit parameter: must be a positive integer' });
       }
-      const insights = getTopInsights(db, date, limit);
+      const insights = getTopInsights(db, date, limit, parseFilter(req));
       res.json(insights);
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch top insights' });
@@ -97,7 +119,7 @@ export function createDashboardServer(config: Config): Application {
           .status(400)
           .json({ error: 'Invalid days parameter: must be a positive integer' });
       }
-      const chains = getRecurrenceChains(db, days);
+      const chains = getRecurrenceChains(db, days, parseFilter(req));
       res.json(chains);
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch recurrence chains' });
@@ -112,7 +134,7 @@ export function createDashboardServer(config: Config): Application {
           .status(400)
           .json({ error: 'Invalid or missing date parameter: must be YYYY-MM-DD' });
       }
-      const rollup = getCrossProjectRollup(db, date);
+      const rollup = getCrossProjectRollup(db, date, parseFilter(req));
       res.json(rollup);
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch cross-project rollup' });
@@ -127,7 +149,7 @@ export function createDashboardServer(config: Config): Application {
           .status(400)
           .json({ error: 'Invalid or missing date parameter: must be YYYY-MM-DD' });
       }
-      const breakdown = getEffortBreakdown(db, date);
+      const breakdown = getEffortBreakdown(db, date, parseFilter(req));
       res.json(breakdown);
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch effort breakdown' });
@@ -142,10 +164,70 @@ export function createDashboardServer(config: Config): Application {
           .status(400)
           .json({ error: 'Invalid days parameter: must be a positive integer' });
       }
-      const trend = getEffortBreakdownTrend(db, days);
+      const trend = getEffortBreakdownTrend(db, days, parseFilter(req));
       res.json(trend);
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch effort breakdown trend' });
+    }
+  });
+
+  app.get('/api/effort-by-category', (req: Request, res: Response) => {
+    try {
+      const date = parseDate(req.query.date as string);
+      if (!date) {
+        return res
+          .status(400)
+          .json({ error: 'Invalid or missing date parameter: must be YYYY-MM-DD' });
+      }
+      const breakdown = getEffortByCategory(db, date, parseFilter(req));
+      res.json(breakdown);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch effort by category' });
+    }
+  });
+
+  app.get('/api/labels', (req: Request, res: Response) => {
+    try {
+      res.json(getLabels(db));
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch labels' });
+    }
+  });
+
+  app.get('/api/projects', (req: Request, res: Response) => {
+    try {
+      res.json(getProjects(db));
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch projects' });
+    }
+  });
+
+  app.get('/api/sessions', (req: Request, res: Response) => {
+    try {
+      const project = req.query.project as string | undefined;
+      res.json(getSessions(db, project));
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch sessions' });
+    }
+  });
+
+  app.post('/api/labels', (req: Request, res: Response) => {
+    try {
+      const { projectDir, sessionId, oldLabel, label } = req.body as {
+        projectDir?: string;
+        sessionId?: string;
+        oldLabel?: string;
+        label?: string;
+      };
+      if (!projectDir || !sessionId || oldLabel === undefined || !label) {
+        return res.status(400).json({
+          error: 'Body must include projectDir, sessionId, oldLabel, and label',
+        });
+      }
+      const changes = updateLabelsForSession(db, projectDir, sessionId, oldLabel, label);
+      res.json({ ok: true, changes });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to update label' });
     }
   });
 

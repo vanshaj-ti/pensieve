@@ -9,6 +9,11 @@ import {
   getRecurrenceChains,
   getCrossProjectRollup,
   getEffortBreakdown,
+  getLabels,
+  getProjects,
+  getSessions,
+  updateLabelsForSession,
+  getEffortByCategory,
 } from '../src/analytics/index.js';
 
 describe('analytics', () => {
@@ -616,6 +621,184 @@ describe('analytics', () => {
       expect(result.judgment).toBe(1);
       expect(result.toil).toBe(0);
       expect(result.overhead).toBe(0);
+    });
+  });
+
+  describe('AnalyticsFilter (label/project/session)', () => {
+    beforeEach(() => {
+      db.prepare(
+        `
+        INSERT INTO episodes (date, project_dir, session_id, start_line, end_line, label)
+        VALUES
+          ('2026-07-15', '/project-a', 'session-1', 1, 10, 'run-a'),
+          ('2026-07-15', '/project-b', 'session-2', 1, 10, 'run-b')
+      `,
+      ).run();
+
+      db.prepare(
+        `
+        INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, effort_class, verified_by_git, recurrence_of, created_at)
+        VALUES
+          (1, 'strategic_value', 'From run-a', 'ref-a', 0.9, 'judgment', NULL, NULL, '2026-07-15T10:00:00Z'),
+          (2, 'friction_audit', 'From run-b', 'ref-b', 0.5, 'toil', NULL, NULL, '2026-07-15T10:00:00Z')
+      `,
+      ).run();
+    });
+
+    it('getCategoryTrend scopes to a label', () => {
+      const result = getCategoryTrend(db, 30, { label: 'run-a' });
+      expect(result).toEqual([{ date: '2026-07-15', category: 'strategic_value', count: 1 }]);
+    });
+
+    it('getTopInsights scopes to a project', () => {
+      const result = getTopInsights(db, '2026-07-15', 10, { projectDir: '/project-b' });
+      expect(result).toHaveLength(1);
+      expect(result[0].text).toBe('From run-b');
+    });
+
+    it('getEffortBreakdown scopes to a session', () => {
+      const result = getEffortBreakdown(db, '2026-07-15', { sessionId: 'session-1' });
+      expect(result.total).toBe(1);
+      expect(result.judgment).toBe(1);
+      expect(result.toil).toBe(0);
+    });
+
+    it('combines label + project filters', () => {
+      const result = getTopInsights(db, '2026-07-15', 10, {
+        label: 'run-a',
+        projectDir: '/project-b',
+      });
+      expect(result).toHaveLength(0);
+    });
+  });
+
+  describe('getLabels / getProjects / getSessions / updateLabelsForSession', () => {
+    beforeEach(() => {
+      db.prepare(
+        `
+        INSERT INTO episodes (date, project_dir, session_id, start_line, end_line, label)
+        VALUES
+          ('2026-07-15', '/project-a', 'session-1', 1, 10, 'run-a'),
+          ('2026-07-15', '/project-a', 'session-1', 11, 20, 'run-a'),
+          ('2026-07-15', '/project-b', 'session-2', 1, 10, 'run-b')
+      `,
+      ).run();
+
+      db.prepare(
+        `
+        INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, effort_class, verified_by_git, recurrence_of, created_at)
+        VALUES
+          (1, 'strategic_value', 'Insight 1', 'ref1', 0.9, 'judgment', NULL, NULL, '2026-07-15T10:00:00Z'),
+          (2, 'friction_audit', 'Insight 2', 'ref2', 0.8, 'toil', NULL, NULL, '2026-07-15T10:00:00Z'),
+          (3, 'ai_leverage', 'Insight 3', 'ref3', 0.7, 'judgment', NULL, NULL, '2026-07-15T10:00:00Z')
+      `,
+      ).run();
+    });
+
+    it('getLabels groups insight counts by label', () => {
+      const result = getLabels(db);
+      expect(result).toEqual(
+        expect.arrayContaining([
+          { label: 'run-a', count: 2 },
+          { label: 'run-b', count: 1 },
+        ]),
+      );
+    });
+
+    it('getProjects groups insight counts by project', () => {
+      const result = getProjects(db);
+      expect(result).toEqual(
+        expect.arrayContaining([
+          { projectDir: '/project-a', count: 2 },
+          { projectDir: '/project-b', count: 1 },
+        ]),
+      );
+    });
+
+    it('getSessions scoped to a project only returns that project', () => {
+      const result = getSessions(db, '/project-a');
+      expect(result).toEqual([{ projectDir: '/project-a', sessionId: 'session-1', count: 2 }]);
+    });
+
+    it('getSessions with no project returns all sessions', () => {
+      const result = getSessions(db);
+      expect(result).toHaveLength(2);
+    });
+
+    it('updateLabelsForSession relabels only matching project+session+oldLabel rows', () => {
+      const changed = updateLabelsForSession(db, '/project-a', 'session-1', 'run-a', 'renamed');
+      expect(changed).toBe(2);
+
+      const labels = getLabels(db);
+      expect(labels).toEqual(
+        expect.arrayContaining([
+          { label: 'renamed', count: 2 },
+          { label: 'run-b', count: 1 },
+        ]),
+      );
+    });
+
+    it('updateLabelsForSession does not touch rows with a different oldLabel', () => {
+      const changed = updateLabelsForSession(db, '/project-a', 'session-1', 'wrong-old', 'renamed');
+      expect(changed).toBe(0);
+    });
+  });
+
+  describe('getEffortByCategory', () => {
+    it('returns empty array for a date with no insights', () => {
+      const result = getEffortByCategory(db, '2026-07-15');
+      expect(result).toEqual([]);
+    });
+
+    it('cross-tabs category x effort_class', () => {
+      db.prepare(
+        `
+        INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
+        VALUES ('2026-07-15', '/tmp/project', 'session-1', 1, 10)
+      `,
+      ).run();
+
+      db.prepare(
+        `
+        INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, effort_class, verified_by_git, recurrence_of, created_at)
+        VALUES
+          (1, 'friction_audit', 'Toil 1', 'ref1', 3, 'toil', NULL, NULL, '2026-07-15T10:00:00Z'),
+          (1, 'friction_audit', 'Toil 2', 'ref2', 3, 'toil', NULL, NULL, '2026-07-15T10:00:00Z'),
+          (1, 'friction_audit', 'Judgment 1', 'ref3', 4, 'judgment', NULL, NULL, '2026-07-15T10:00:00Z'),
+          (1, 'decision_record', 'Overhead 1', 'ref4', 2, 'overhead', NULL, NULL, '2026-07-15T10:00:00Z')
+      `,
+      ).run();
+
+      const result = getEffortByCategory(db, '2026-07-15');
+      expect(result).toEqual([
+        { category: 'friction_audit', toil: 2, judgment: 1, overhead: 0, total: 3 },
+        { category: 'decision_record', toil: 0, judgment: 0, overhead: 1, total: 1 },
+      ]);
+    });
+
+    it('respects AnalyticsFilter', () => {
+      db.prepare(
+        `
+        INSERT INTO episodes (date, project_dir, session_id, start_line, end_line, label)
+        VALUES
+          ('2026-07-15', '/project-a', 'session-1', 1, 10, 'run-a'),
+          ('2026-07-15', '/project-b', 'session-2', 1, 10, 'run-b')
+      `,
+      ).run();
+
+      db.prepare(
+        `
+        INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, effort_class, verified_by_git, recurrence_of, created_at)
+        VALUES
+          (1, 'friction_audit', 'From run-a', 'ref-a', 3, 'toil', NULL, NULL, '2026-07-15T10:00:00Z'),
+          (2, 'friction_audit', 'From run-b', 'ref-b', 3, 'judgment', NULL, NULL, '2026-07-15T10:00:00Z')
+      `,
+      ).run();
+
+      const result = getEffortByCategory(db, '2026-07-15', { label: 'run-a' });
+      expect(result).toEqual([
+        { category: 'friction_audit', toil: 1, judgment: 0, overhead: 0, total: 1 },
+      ]);
     });
   });
 });
