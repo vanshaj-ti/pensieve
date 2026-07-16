@@ -348,4 +348,62 @@ describe('pipeline', () => {
     };
     expect(count.count).toBe(0);
   });
+
+  describe('run labeling', () => {
+    function makeScanResultAndInsights(sessionId: string) {
+      const now = new Date().toISOString();
+      const scanResult: ScanResult = {
+        projectDir: '/tmp/test-project',
+        sessionId,
+        filePath: `/tmp/test-project/${sessionId}.jsonl`,
+        lines: [
+          { lineNumber: 1, timestamp: now, kind: 'tool' as const, toolName: 'test', text: 'x' },
+        ],
+        maxLineNumber: 100,
+      };
+      const insights: Insight[] = [
+        {
+          episodeId: 0,
+          category: 'strategic_value',
+          text: 'Test insight',
+          evidenceRef: 'line 1',
+          significanceScore: 0.8,
+          verifiedByGit: null,
+          recurrenceOf: null,
+          createdAt: now,
+        },
+      ];
+      return { scanResult, insights };
+    }
+
+    it('auto-generates a run label when none is provided', async () => {
+      const { scanResult, insights } = makeScanResultAndInsights('session-auto-label');
+      const { scanNewLines } = await import('../src/ingest/index.js');
+      const { runExtraction } = await import('../src/extract/index.js');
+      vi.mocked(scanNewLines).mockResolvedValueOnce([scanResult]);
+      vi.mocked(runExtraction).mockResolvedValueOnce(insights);
+
+      await runDailyAnalysis({ db, force: false });
+
+      const row = db
+        .prepare('SELECT label FROM episodes WHERE session_id = ?')
+        .get('session-auto-label') as { label: string };
+      expect(row.label).toMatch(/^run-/);
+    });
+
+    it('persists a custom label when provided', async () => {
+      const { scanResult, insights } = makeScanResultAndInsights('session-custom-label');
+      const { scanNewLines } = await import('../src/ingest/index.js');
+      const { runExtraction } = await import('../src/extract/index.js');
+      vi.mocked(scanNewLines).mockResolvedValueOnce([scanResult]);
+      vi.mocked(runExtraction).mockResolvedValueOnce(insights);
+
+      await runDailyAnalysis({ db, force: false, label: 'my-custom-run' });
+
+      const row = db
+        .prepare('SELECT label FROM episodes WHERE session_id = ?')
+        .get('session-custom-label') as { label: string };
+      expect(row.label).toBe('my-custom-run');
+    });
+  });
 });

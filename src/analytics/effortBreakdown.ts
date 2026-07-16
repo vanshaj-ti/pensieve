@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3';
-import { localDateKey } from './shared.js';
+import { localDateKey, buildFilterClause, type AnalyticsFilter } from './shared.js';
 
 export interface EffortBreakdown {
   toil: number;
@@ -23,18 +23,24 @@ export interface EffortBreakdownTrendPoint extends EffortBreakdown {
  * time — a duration-weighted version (using episode line-spans) is a
  * natural follow-up once this is validated as useful.
  */
-export function getEffortBreakdown(db: Database.Database, date: string): EffortBreakdown {
+export function getEffortBreakdown(
+  db: Database.Database,
+  date: string,
+  filter?: AnalyticsFilter,
+): EffortBreakdown {
+  const { sql: filterSql, params: filterParams } = buildFilterClause(filter);
+
   const rows = db
     .prepare(
       `
     SELECT i.effort_class, COUNT(*) as count
     FROM insights i
     JOIN episodes e ON i.episode_id = e.id
-    WHERE e.date = ?
+    WHERE e.date = ?${filterSql}
     GROUP BY i.effort_class
   `,
     )
-    .all(date) as Array<{ effort_class: string; count: number }>;
+    .all(date, ...filterParams) as Array<{ effort_class: string; count: number }>;
 
   const counts = { toil: 0, judgment: 0, overhead: 0 };
   for (const row of rows) {
@@ -61,9 +67,11 @@ export function getEffortBreakdown(db: Database.Database, date: string): EffortB
 export function getEffortBreakdownTrend(
   db: Database.Database,
   days: number,
+  filter?: AnalyticsFilter,
 ): EffortBreakdownTrendPoint[] {
   const cutoffMs = Date.now() - days * 86400000;
   const cutoffDate = localDateKey(cutoffMs);
+  const { sql: filterSql, params: filterParams } = buildFilterClause(filter);
 
   const rows = db
     .prepare(
@@ -71,12 +79,12 @@ export function getEffortBreakdownTrend(
     SELECT e.date, i.effort_class, COUNT(*) as count
     FROM insights i
     JOIN episodes e ON i.episode_id = e.id
-    WHERE e.date >= ?
+    WHERE e.date >= ?${filterSql}
     GROUP BY e.date, i.effort_class
     ORDER BY e.date ASC
   `,
     )
-    .all(cutoffDate) as Array<{
+    .all(cutoffDate, ...filterParams) as Array<{
     date: string;
     effort_class: string;
     count: number;

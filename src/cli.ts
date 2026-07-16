@@ -20,6 +20,7 @@ export interface AnalyzeCommandOptions {
   dryRun?: boolean;
   project?: string;
   session?: string;
+  label?: string;
 }
 
 export async function runAnalyzeCommand(opts: AnalyzeCommandOptions): Promise<void> {
@@ -31,6 +32,7 @@ export async function runAnalyzeCommand(opts: AnalyzeCommandOptions): Promise<vo
       dryRun: opts.dryRun,
       projectFilter: opts.project,
       sessionFilter: opts.session,
+      label: opts.label,
     });
 
     // Determine which dates to write briefs for
@@ -111,6 +113,7 @@ program
     'Scope to one project (sanitized dir name under ~/.claude/projects/)',
   )
   .option('--session <sessionId>', 'Scope to one session within --project (filename minus .jsonl)')
+  .option('--label <name>', 'Tag this run with a label (auto-generated if omitted)')
   .action(async (opts: AnalyzeCommandOptions) => {
     await runAnalyzeCommand(opts);
   });
