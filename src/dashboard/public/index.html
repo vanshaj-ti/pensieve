@@ -20,53 +20,68 @@
         </div>
       </header>
 
-      <div class="stat-strip" id="stat-strip"></div>
+      <nav class="tab-nav">
+        <button class="tab-button active" data-tab="overview">Overview</button>
+        <button class="tab-button" data-tab="top-insights">Top Insights</button>
+        <button class="tab-button" data-tab="recurring">Recurring Patterns</button>
+        <button class="tab-button" data-tab="by-project">By Project</button>
+      </nav>
 
       <main>
-        <section class="card">
-          <h2>
-            Effort Breakdown
-            <span class="card-hint">today</span>
-          </h2>
-          <div class="chart-container small">
-            <canvas id="effort-breakdown-chart"></canvas>
-          </div>
-        </section>
+        <div class="tab-panel active" data-tab-panel="overview">
+          <div class="stat-strip" id="stat-strip"></div>
 
-        <section class="card">
-          <h2>
-            Toil Over Time
-            <span class="card-hint">last 30 days</span>
-          </h2>
-          <div class="chart-container small">
-            <canvas id="effort-trend-chart"></canvas>
-          </div>
-        </section>
+          <section class="card">
+            <h2>
+              Effort Breakdown
+              <span class="card-hint">today</span>
+            </h2>
+            <div class="chart-container small">
+              <canvas id="effort-breakdown-chart"></canvas>
+            </div>
+          </section>
 
-        <section class="card span-full">
-          <h2>
-            Category Trend
-            <span class="card-hint">last 30 days</span>
-          </h2>
-          <div class="chart-container">
-            <canvas id="category-trend-chart"></canvas>
-          </div>
-        </section>
+          <section class="card">
+            <h2>
+              Toil Over Time
+              <span class="card-hint">last 30 days</span>
+            </h2>
+            <div class="chart-container small">
+              <canvas id="effort-trend-chart"></canvas>
+            </div>
+          </section>
 
-        <section class="card">
-          <h2>Top Insights</h2>
-          <div id="top-insights-container"></div>
-        </section>
+          <section class="card span-full">
+            <h2>
+              Category Trend
+              <span class="card-hint">last 30 days</span>
+            </h2>
+            <div class="chart-container">
+              <canvas id="category-trend-chart"></canvas>
+            </div>
+          </section>
+        </div>
 
-        <section class="card">
-          <h2>Recurring Patterns</h2>
-          <div id="recurrence-container"></div>
-        </section>
+        <div class="tab-panel" data-tab-panel="top-insights">
+          <section class="card span-full">
+            <h2>Top Insights</h2>
+            <div id="top-insights-container"></div>
+          </section>
+        </div>
 
-        <section class="card span-full" id="cross-project-section" style="display: none">
-          <h2>By Project</h2>
-          <div id="cross-project-container"></div>
-        </section>
+        <div class="tab-panel" data-tab-panel="recurring">
+          <section class="card span-full">
+            <h2>Recurring Patterns</h2>
+            <div id="recurrence-container"></div>
+          </section>
+        </div>
+
+        <div class="tab-panel" data-tab-panel="by-project">
+          <section class="card span-full" id="cross-project-section" style="display: none">
+            <h2>By Project</h2>
+            <div id="cross-project-container"></div>
+          </section>
+        </div>
       </main>
     </div>
 
