@@ -206,6 +206,7 @@ describe('Extract: Haiku Pass', () => {
     const call = mockCreate.mock.calls[0][0];
     expect(call.system).toBeDefined();
     expect(call.system[0].cache_control).toEqual({ type: 'ephemeral' });
+    expect(call.temperature).toBe(0);
     expect(call.messages[0].content).toContain('session-1');
     expect(call.messages[0].content).toContain('tool_use');
     expect(call.messages[0].content).toContain('tool_result');
@@ -437,6 +438,7 @@ describe('Extract: Sonnet Pass', () => {
     expect(userMessage).toContain('Candidate 1');
     expect(userMessage).toContain('Candidate 2');
     expect(userMessage).toContain('Previous insight');
+    expect(call.temperature).toBe(0);
   });
 
   it('Case 4: Sonnet response parsing with recurrence field', async () => {

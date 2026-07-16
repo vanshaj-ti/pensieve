@@ -126,6 +126,12 @@ export async function generateCandidates(
     const response = (await client.beta.promptCaching.messages.create({
       model: 'claude-haiku-4-5',
       max_tokens: 8192,
+      // Pinned to 0 (not left at the API default of 1.0) so identical
+      // episode input produces near-identical extraction across repeated
+      // runs of the same session — greedy decoding instead of sampled.
+      // Zero cost/latency tradeoff (temperature doesn't affect pricing or
+      // speed, only token-selection determinism).
+      temperature: 0,
       system: [
         {
           type: 'text',
