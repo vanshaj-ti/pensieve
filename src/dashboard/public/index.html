@@ -10,48 +10,61 @@
   <body>
     <div class="container">
       <header>
-        <h1>Pensieve Analytics</h1>
+        <div class="title-group">
+          <h1>Pensieve</h1>
+          <p>Daily insight analytics</p>
+        </div>
+        <div class="date-picker-section">
+          <label for="date-picker">Date</label>
+          <select id="date-picker"></select>
+        </div>
       </header>
 
-      <div class="date-picker-section">
-        <label for="date-picker">Select Date:</label>
-        <select id="date-picker"></select>
-      </div>
+      <div class="stat-strip" id="stat-strip"></div>
 
       <main>
-        <section class="chart-section">
-          <h2>Effort Breakdown</h2>
-          <div class="chart-container">
+        <section class="card">
+          <h2>
+            Effort Breakdown
+            <span class="card-hint">today</span>
+          </h2>
+          <div class="chart-container small">
             <canvas id="effort-breakdown-chart"></canvas>
           </div>
         </section>
 
-        <section class="chart-section">
-          <h2>Category Trend (30 days)</h2>
+        <section class="card">
+          <h2>
+            Toil Over Time
+            <span class="card-hint">last 30 days</span>
+          </h2>
+          <div class="chart-container small">
+            <canvas id="effort-trend-chart"></canvas>
+          </div>
+        </section>
+
+        <section class="card span-full">
+          <h2>
+            Category Trend
+            <span class="card-hint">last 30 days</span>
+          </h2>
           <div class="chart-container">
             <canvas id="category-trend-chart"></canvas>
           </div>
         </section>
 
-        <section class="chart-section">
-          <h2>Effort Breakdown Trend (30 days)</h2>
-          <div class="chart-container">
-            <canvas id="effort-trend-chart"></canvas>
-          </div>
-        </section>
-
-        <section class="table-section">
+        <section class="card">
           <h2>Top Insights</h2>
           <div id="top-insights-container"></div>
         </section>
 
-        <section class="table-section">
+        <section class="card">
           <h2>Recurring Patterns</h2>
           <div id="recurrence-container"></div>
         </section>
 
-        <section class="table-section" id="cross-project-section" style="display: none">
-          <h2>Cross-Project Rollup</h2>
+        <section class="card span-full" id="cross-project-section" style="display: none">
+          <h2>By Project</h2>
           <div id="cross-project-container"></div>
         </section>
       </main>
