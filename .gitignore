@@ -13,3 +13,4 @@ dist/
 .claude/
 .harness-mem/
 .repowise/
+.playwright-mcp/

@@ -299,20 +299,86 @@ function renderRecurrenceChains(chains) {
     const li = document.createElement('li');
     li.className = 'chain-item';
 
-    const title = document.createElement('div');
-    title.className = 'chain-title';
-    title.textContent = `Recurred ${chain.insights.length}×`;
-    li.appendChild(title);
+    const header = document.createElement('div');
+    header.className = 'chain-header';
 
-    const path = document.createElement('div');
-    path.className = 'chain-path';
-    path.textContent = chain.insights.map((i) => i.text).join(' → ');
-    li.appendChild(path);
+    const firstInsight = chain.insights[0];
+    const lastInsight = chain.insights[chain.insights.length - 1];
 
-    const span = document.createElement('div');
-    span.className = 'chain-span';
-    span.textContent = `${chain.span.firstDate} → ${chain.span.lastDate}`;
-    li.appendChild(span);
+    const catBadge = document.createElement('span');
+    catBadge.className = 'badge badge-category';
+    catBadge.textContent = firstInsight.category.replace(/_/g, ' ');
+    header.appendChild(catBadge);
+
+    const effortBadge = document.createElement('span');
+    effortBadge.className = `badge badge-effort ${lastInsight.effortClass}`;
+    effortBadge.textContent = lastInsight.effortClass;
+    header.appendChild(effortBadge);
+
+    const label = document.createElement('span');
+    label.className = 'chain-label';
+    const dayCount = chain.insights.length;
+    label.textContent = `Recurred ${dayCount}× over ${chain.span.firstDate} → ${chain.span.lastDate}`;
+    header.appendChild(label);
+
+    li.appendChild(header);
+
+    const occurrenceList = document.createElement('div');
+    occurrenceList.className = 'chain-occurrence-list';
+
+    const firstOccurrence = document.createElement('div');
+    firstOccurrence.className = 'chain-occurrence';
+    const firstMarker = document.createElement('div');
+    firstMarker.className = 'occurrence-marker';
+    firstMarker.textContent = 'First';
+    const firstText = document.createElement('div');
+    firstText.className = 'occurrence-text';
+    firstText.textContent = firstInsight.text;
+    firstOccurrence.appendChild(firstMarker);
+    firstOccurrence.appendChild(firstText);
+    occurrenceList.appendChild(firstOccurrence);
+
+    if (chain.insights.length > 1) {
+      const lastOccurrence = document.createElement('div');
+      lastOccurrence.className = 'chain-occurrence';
+      const lastMarker = document.createElement('div');
+      lastMarker.className = 'occurrence-marker';
+      lastMarker.textContent = 'Latest';
+      const lastText = document.createElement('div');
+      lastText.className = 'occurrence-text';
+      lastText.textContent = lastInsight.text;
+      lastOccurrence.appendChild(lastMarker);
+      lastOccurrence.appendChild(lastText);
+      occurrenceList.appendChild(lastOccurrence);
+    }
+
+    li.appendChild(occurrenceList);
+
+    if (chain.insights.length > 2) {
+      const details = document.createElement('details');
+      details.className = 'chain-details';
+
+      const summary = document.createElement('summary');
+      summary.textContent = `Show all ${chain.insights.length} occurrences`;
+      details.appendChild(summary);
+
+      const list = document.createElement('div');
+      list.className = 'chain-details-list';
+      chain.insights.forEach((insight, idx) => {
+        const item = document.createElement('div');
+        item.className = 'chain-details-item';
+        item.textContent = `${idx + 1}. ${insight.text}`;
+        list.appendChild(item);
+      });
+      details.appendChild(list);
+
+      li.appendChild(details);
+    }
+
+    const dateSpan = document.createElement('div');
+    dateSpan.className = 'chain-date-span';
+    dateSpan.textContent = `${chain.span.firstDate} → ${chain.span.lastDate}`;
+    li.appendChild(dateSpan);
 
     ul.appendChild(li);
   });
@@ -380,13 +446,32 @@ async function loadAll(date) {
   }
 }
 
+function initTabs() {
+  const buttons = document.querySelectorAll('.tab-button');
+  const panels = document.querySelectorAll('.tab-panel');
+
+  buttons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const tabName = btn.getAttribute('data-tab');
+
+      buttons.forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      panels.forEach((p) => p.classList.remove('active'));
+      document.querySelector(`[data-tab-panel="${tabName}"]`).classList.add('active');
+    });
+  });
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
+  initTabs();
+
   try {
     const dates = await fetchDates();
     const picker = document.getElementById('date-picker');
 
     if (dates.length === 0) {
-      document.querySelector('main').innerHTML =
+      document.querySelector('[data-tab-panel="overview"]').innerHTML =
         '<div class="empty-state" style="grid-column: 1 / -1;">No data yet — run `pensieve analyze` first.</div>';
       document.getElementById('stat-strip').style.display = 'none';
       picker.style.display = 'none';
