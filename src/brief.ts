@@ -144,7 +144,7 @@ export function writeBrief(options: BriefOptions): { path: string; insightCount:
       `
     SELECT
       i.id, i.episode_id, i.category, i.text, i.evidence_ref, i.significance_score,
-      i.verified_by_git, i.recurrence_of, i.created_at
+      i.effort_class, i.verified_by_git, i.recurrence_of, i.created_at
     FROM insights i
     JOIN episodes e ON i.episode_id = e.id
     WHERE e.date = ?
@@ -158,6 +158,7 @@ export function writeBrief(options: BriefOptions): { path: string; insightCount:
     text: string;
     evidence_ref: string;
     significance_score: number;
+    effort_class: string;
     verified_by_git: boolean | null;
     recurrence_of: number | null;
     created_at: string;
@@ -190,6 +191,7 @@ export function writeBrief(options: BriefOptions): { path: string; insightCount:
       text: row.text,
       evidenceRef: row.evidence_ref,
       significanceScore: row.significance_score,
+      effortClass: row.effort_class,
       verifiedByGit: row.verified_by_git ? true : null, // SQLite returns 1/0/null as number/null
       recurrenceOf: row.recurrence_of,
       createdAt: row.created_at,

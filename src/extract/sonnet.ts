@@ -13,7 +13,8 @@ export function getRecentInsights(db: Database.Database, days = 7): Insight[] {
 
   const stmt = db.prepare(`
     SELECT id, episode_id as episodeId, category, text, evidence_ref as evidenceRef,
-           significance_score as significanceScore, verified_by_git as verifiedByGit,
+           significance_score as significanceScore, effort_class as effortClass,
+           verified_by_git as verifiedByGit,
            recurrence_of as recurrenceOf, created_at as createdAt
     FROM insights
     WHERE created_at >= ?
@@ -66,6 +67,21 @@ Your task:
    - 4 = significant; actionable, affects reliability/correctness/velocity.
    - 5 = critical; production bug, data loss, security issue, or a decision that changes the architecture.
 5. **Polish text**: Refine the insight text to be clear, concise, and actionable.
+6. **Classify effort**: Assign effortClass — orthogonal to category, answers
+   "what kind of work produced this," not "what kind of thing is this":
+   - toil: mechanical/repetitive work that shouldn't have needed a human
+     more than once (e.g. the same manual workaround applied repeatedly
+     because nobody fixed the root cause; a fix that "recurred" before
+     being properly resolved).
+   - judgment: real skilled reasoning or non-repeatable problem-solving
+     (diagnosing an unfamiliar bug, weighing a real tradeoff, architecting
+     a fix).
+   - overhead: necessary but zero-signal cost — waiting, setup, tool
+     friction — neither toil nor judgment, just tax on the session.
+   Two insights can share a category but differ here: a hard, non-repeatable
+   bug and a manual fix applied twice because the root cause was never
+   addressed are both plausibly friction_audit, but the first is judgment
+   and the second is toil.
 
 Output only approved insights with all fields populated. recurrenceOf may be left null for every candidate — the embedding-based recurrence pass downstream will set it independently; do not spend effort guessing it from the pasted history.`;
 
@@ -144,6 +160,10 @@ Process these candidates: reject hallucinations, merge near-duplicates, score si
                   text: { type: 'string' },
                   evidenceRef: { type: 'string' },
                   significanceScore: { type: 'number' },
+                  effortClass: {
+                    type: 'string',
+                    enum: ['toil', 'judgment', 'overhead'],
+                  },
                   recurrenceOf: { type: ['number', 'null'] },
                 },
                 required: [
@@ -152,6 +172,7 @@ Process these candidates: reject hallucinations, merge near-duplicates, score si
                   'text',
                   'evidenceRef',
                   'significanceScore',
+                  'effortClass',
                   'recurrenceOf',
                 ],
               },
@@ -204,6 +225,7 @@ Process these candidates: reject hallucinations, merge near-duplicates, score si
       text: itemObj.text as string,
       evidenceRef: itemObj.evidenceRef as string,
       significanceScore: itemObj.significanceScore as number,
+      effortClass: itemObj.effortClass as Insight['effortClass'],
       verifiedByGit: null,
       recurrenceOf: (itemObj.recurrenceOf as number | null) ?? null,
       createdAt: new Date().toISOString(),

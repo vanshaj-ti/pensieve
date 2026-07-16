@@ -129,8 +129,8 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
               VALUES (?, ?, ?, ?, ?)
             `);
             const insertInsight = db.prepare(`
-              INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+              INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, effort_class, verified_by_git, recurrence_of, created_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             `);
             const insertEmbedding = db.prepare(`
               INSERT INTO insight_embeddings (insight_id, embedding, model, created_at)
@@ -163,6 +163,7 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
                     validated.text,
                     validated.evidenceRef,
                     validated.significanceScore,
+                    validated.effortClass,
                     validated.verifiedByGit,
                     validated.recurrenceOf,
                     validated.createdAt,

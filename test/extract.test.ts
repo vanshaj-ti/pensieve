@@ -413,6 +413,7 @@ describe('Extract: Sonnet Pass', () => {
         text: 'Previous insight',
         evidenceRef: 'line:5',
         significanceScore: 4,
+        effortClass: 'judgment' as const,
         verifiedByGit: null,
         recurrenceOf: null,
         createdAt: '2026-07-14T10:00:00Z',
@@ -464,6 +465,7 @@ describe('Extract: Sonnet Pass', () => {
                 text: 'Polished insight',
                 evidenceRef: 'line:15',
                 significanceScore: 4,
+                effortClass: 'judgment',
                 recurrenceOf: 100,
               },
               {
@@ -472,6 +474,7 @@ describe('Extract: Sonnet Pass', () => {
                 text: 'New decision',
                 evidenceRef: 'line:16',
                 significanceScore: 3,
+                effortClass: 'toil',
                 recurrenceOf: null,
               },
             ],
@@ -562,6 +565,7 @@ describe('Extract: Orchestration', () => {
         text TEXT NOT NULL,
         evidence_ref TEXT NOT NULL,
         significance_score REAL NOT NULL,
+        effort_class TEXT NOT NULL DEFAULT 'judgment',
         verified_by_git INTEGER,
         recurrence_of INTEGER,
         created_at TEXT NOT NULL
@@ -569,8 +573,8 @@ describe('Extract: Orchestration', () => {
     `);
 
     db.exec(`
-      INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
-      VALUES (99, 'strategic_value', 'Old insight', 'line:5', 4.0, NULL, NULL, '2026-07-14T10:00:00Z')
+      INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, effort_class, verified_by_git, recurrence_of, created_at)
+      VALUES (99, 'strategic_value', 'Old insight', 'line:5', 4.0, 'judgment', NULL, NULL, '2026-07-14T10:00:00Z')
     `);
 
     mockCreate = vi.fn();
@@ -672,6 +676,7 @@ describe('Extract: Orchestration', () => {
                   text: 'Verified issue from episode 2',
                   evidenceRef: 'line:6',
                   significanceScore: 3,
+                  effortClass: 'toil',
                   recurrenceOf: null,
                 },
               ],
@@ -747,6 +752,7 @@ describe('Extract: Orchestration', () => {
                 text: 'Verified AI opportunity',
                 evidenceRef: 'line:1',
                 significanceScore: 4,
+                effortClass: 'overhead',
                 recurrenceOf: null,
               },
             ],
