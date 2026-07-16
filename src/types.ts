@@ -51,3 +51,9 @@ export const InsightSchema = z.object({
   createdAt: z.string(),
 });
 export type Insight = z.infer<typeof InsightSchema>;
+
+/** OpenAI-compatible embeddings response. */
+export const EmbeddingResponseSchema = z.object({
+  data: z.array(z.object({ embedding: z.array(z.number()), index: z.number() })).min(1),
+});
+export type EmbeddingResponse = z.infer<typeof EmbeddingResponseSchema>;

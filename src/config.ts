@@ -10,6 +10,22 @@ export interface Config {
   dbPath: string;
   /** Directory where daily markdown briefs are written (spec §8). */
   briefsDir: string;
+  /** Base URL for embeddings API (null = feature disabled). */
+  embeddingsBaseUrl: string | null;
+  /** API key for embeddings endpoint. */
+  embeddingsApiKey: string | null;
+  /** Model name for embeddings (default 'text-embedding-3-small'). */
+  embeddingsModel: string;
+  /** Header name for auth token (default 'Authorization'). */
+  embeddingsAuthHeader: string;
+  /** Auth scheme prefix (e.g. 'Bearer', empty string for raw key). */
+  embeddingsAuthScheme: string;
+  /** Extra headers for embeddings requests. */
+  embeddingsExtraHeaders: Record<string, string>;
+  /** Path component of embeddings endpoint (default '/v1/embeddings'). */
+  embeddingsPath: string;
+  /** Cosine similarity threshold for detecting recurrence (0-1, default 0.90). */
+  recurrenceSimilarityThreshold: number;
 }
 
 function defaultConfig(): Config {
@@ -18,6 +34,14 @@ function defaultConfig(): Config {
     idleGapMinutes: DEFAULT_IDLE_GAP_MINUTES,
     dbPath: join(home, '.pensieve', 'pensieve.db'),
     briefsDir: join(home, '.pensieve', 'briefs'),
+    embeddingsBaseUrl: null,
+    embeddingsApiKey: null,
+    embeddingsModel: 'text-embedding-3-small',
+    embeddingsAuthHeader: 'Authorization',
+    embeddingsAuthScheme: 'Bearer',
+    embeddingsExtraHeaders: {},
+    embeddingsPath: '/v1/embeddings',
+    recurrenceSimilarityThreshold: 0.90,
   };
 }
 
@@ -27,12 +51,79 @@ function envConfig(): Partial<Config> {
   if (process.env.PENSIEVE_IDLE_GAP_MINUTES) {
     const value = process.env.PENSIEVE_IDLE_GAP_MINUTES.trim();
     const parsed = Number(value);
-    // Strict validation: value must be a whole number > 0, not a truncated/coerced parse.
-    // Reject "45minutes", "1.5", "-10", "0", or any non-numeric string.
     if (Number.isInteger(parsed) && parsed > 0) {
       env.idleGapMinutes = parsed;
     }
-    // If invalid, silently fall back to default (no throw).
+  }
+
+  if (process.env.PENSIEVE_EMBEDDINGS_BASE_URL) {
+    const value = process.env.PENSIEVE_EMBEDDINGS_BASE_URL.trim();
+    if (value) {
+      env.embeddingsBaseUrl = value;
+    }
+  }
+
+  if (process.env.PENSIEVE_EMBEDDINGS_API_KEY) {
+    const value = process.env.PENSIEVE_EMBEDDINGS_API_KEY.trim();
+    if (value) {
+      env.embeddingsApiKey = value;
+    }
+  }
+
+  if (process.env.PENSIEVE_EMBEDDINGS_MODEL) {
+    const value = process.env.PENSIEVE_EMBEDDINGS_MODEL.trim();
+    if (value) {
+      env.embeddingsModel = value;
+    }
+  }
+
+  if (process.env.PENSIEVE_EMBEDDINGS_AUTH_HEADER) {
+    const value = process.env.PENSIEVE_EMBEDDINGS_AUTH_HEADER.trim();
+    if (value) {
+      env.embeddingsAuthHeader = value;
+    }
+  }
+
+  if (process.env.PENSIEVE_EMBEDDINGS_AUTH_SCHEME !== undefined) {
+    env.embeddingsAuthScheme = process.env.PENSIEVE_EMBEDDINGS_AUTH_SCHEME;
+  }
+
+  if (process.env.PENSIEVE_EMBEDDINGS_EXTRA_HEADERS) {
+    try {
+      const parsed = JSON.parse(process.env.PENSIEVE_EMBEDDINGS_EXTRA_HEADERS);
+      if (typeof parsed === 'object' && !Array.isArray(parsed)) {
+        const valid: Record<string, string> = {};
+        let hasInvalid = false;
+        for (const [k, v] of Object.entries(parsed)) {
+          if (typeof v === 'string') {
+            valid[k] = v;
+          } else {
+            hasInvalid = true;
+            break;
+          }
+        }
+        if (!hasInvalid) {
+          env.embeddingsExtraHeaders = valid;
+        }
+      }
+    } catch {
+      // Silently ignore parse/shape failure
+    }
+  }
+
+  if (process.env.PENSIEVE_EMBEDDINGS_PATH) {
+    const value = process.env.PENSIEVE_EMBEDDINGS_PATH.trim();
+    if (value && value.startsWith('/')) {
+      env.embeddingsPath = value;
+    }
+  }
+
+  if (process.env.PENSIEVE_RECURRENCE_SIMILARITY_THRESHOLD) {
+    const value = process.env.PENSIEVE_RECURRENCE_SIMILARITY_THRESHOLD.trim();
+    const parsed = Number(value);
+    if (!Number.isNaN(parsed) && parsed > 0 && parsed <= 1) {
+      env.recurrenceSimilarityThreshold = parsed;
+    }
   }
 
   return env;

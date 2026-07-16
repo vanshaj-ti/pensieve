@@ -1,12 +1,13 @@
 import type Database from 'better-sqlite3';
 import Anthropic from '@anthropic-ai/sdk';
 import { loadConfig } from './config.js';
-import { openDb } from './db/schema.js';
+import { openDb, packEmbedding } from './db/schema.js';
 import { scanNewLines } from './ingest/index.js';
 import { advanceCursor } from './ingest/cursor.js';
 import { chunkSession } from './chunk/index.js';
 import { runExtraction } from './extract/index.js';
-import { InsightSchema, type Insight } from './types.js';
+import { applyEmbeddingRecurrence, type InsightWithEmbedding } from './extract/recurrence.js';
+import { InsightSchema } from './types.js';
 
 export interface PipelineOptions {
   force?: boolean;
@@ -81,7 +82,7 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
       interface ExtractedDay {
         date: string;
         drafts: typeof drafts;
-        episodeToInsights: Map<number, Insight[]>; // Map temp episode ID to its insights
+        episodeToInsights: Map<number, InsightWithEmbedding[]>; // Map temp episode ID to its insights + embeddings
       }
 
       const extractedDays: ExtractedDay[] = [];
@@ -97,14 +98,17 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
         // Extract all episodes together
         const allInsights = await runExtraction(persistedEpisodes, db, client);
 
+        // Apply embedding-based recurrence detection
+        const insightsWithEmbeddings = await applyEmbeddingRecurrence(allInsights, db, config);
+
         // Group insights by their episode ID (which is the temp index)
-        const episodeToInsights = new Map<number, Insight[]>();
-        for (const insight of allInsights) {
-          const episodeId = insight.episodeId;
+        const episodeToInsights = new Map<number, InsightWithEmbedding[]>();
+        for (const item of insightsWithEmbeddings) {
+          const episodeId = item.insight.episodeId;
           if (!episodeToInsights.has(episodeId)) {
             episodeToInsights.set(episodeId, []);
           }
-          episodeToInsights.get(episodeId)!.push(insight);
+          episodeToInsights.get(episodeId)!.push(item);
         }
 
         extractedDays.push({
@@ -126,6 +130,10 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
               INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             `);
+            const insertEmbedding = db.prepare(`
+              INSERT INTO insight_embeddings (insight_id, embedding, model, created_at)
+              VALUES (?, ?, ?, ?)
+            `);
 
             for (const day of extractedDays) {
               // Insert all episodes and map temp IDs to real IDs
@@ -143,11 +151,11 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
               }
 
               // Insert insights using correct real episode IDs
-              for (const [tempEpisodeId, insights] of day.episodeToInsights) {
+              for (const [tempEpisodeId, insightsWithEmbeddings] of day.episodeToInsights) {
                 const realEpisodeId = tempToRealId.get(tempEpisodeId) ?? 0;
-                for (const insight of insights) {
+                for (const { insight, embedding } of insightsWithEmbeddings) {
                   const validated = InsightSchema.parse(insight);
-                  insertInsight.run(
+                  const info = insertInsight.run(
                     realEpisodeId,
                     validated.category,
                     validated.text,
@@ -157,6 +165,16 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
                     validated.recurrenceOf,
                     validated.createdAt,
                   );
+
+                  if (embedding !== null) {
+                    insertEmbedding.run(
+                      info.lastInsertRowid as number,
+                      packEmbedding(embedding),
+                      config.embeddingsModel,
+                      validated.createdAt,
+                    );
+                  }
+
                   totalInserts++;
                 }
               }
