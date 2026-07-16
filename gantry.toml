@@ -53,7 +53,13 @@ forbid_paths = [".env", "**/*.pem", "**/secrets/**", "**/*.key"]
 enforce_plan_scope = true
 
 [checks]
-commands = ["npm run lint", "npm run build", "npm test"]
+# Mirrors real CI exactly (.github/workflows/static-checks.yml + tests.yml)
+# so a run that passes gantry's local checks never fails GitHub Actions
+# after auto_ship opens the PR. format:check/typecheck were missing here
+# once — PR #8 passed gantry's checks (lint/build/test) but failed real CI
+# on format:check, since the build agent never ran `npm run format` before
+# committing and nothing local caught it.
+commands = ["npm run format:check", "npm run lint", "npm run typecheck", "npm run build", "npm test"]
 timeout = 900
 auto_resolve = true
 resolve_attempts = 2
