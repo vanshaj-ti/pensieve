@@ -41,6 +41,17 @@ export function initSchema(db: Database.Database): void {
       created_at TEXT NOT NULL
     );
   `);
+
+  // CREATE TABLE IF NOT EXISTS above is a no-op against a pre-existing
+  // insights table from before this column existed — ALTER TABLE ADD COLUMN
+  // is the only way to add it to real databases created by earlier versions.
+  // Default existing rows to 'judgment' (the least presumptuous guess: we
+  // have no signal either way, and treating pre-existing insights as toil
+  // by default would bias any future toil-ratio metric downward for free).
+  const columns = db.prepare(`PRAGMA table_info(insights)`).all() as Array<{ name: string }>;
+  if (!columns.some((c) => c.name === 'effort_class')) {
+    db.exec(`ALTER TABLE insights ADD COLUMN effort_class TEXT NOT NULL DEFAULT 'judgment'`);
+  }
 }
 
 export function packEmbedding(vec: number[]): Buffer {
