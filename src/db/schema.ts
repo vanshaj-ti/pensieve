@@ -33,7 +33,23 @@ export function initSchema(db: Database.Database): void {
       recurrence_of INTEGER,
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS insight_embeddings (
+      insight_id INTEGER PRIMARY KEY REFERENCES insights(id),
+      embedding BLOB NOT NULL,
+      model TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
   `);
+}
+
+export function packEmbedding(vec: number[]): Buffer {
+  return Buffer.from(Float32Array.from(vec).buffer);
+}
+
+export function unpackEmbedding(buf: Buffer): number[] {
+  // Note: sqlite-vec would be the natural upgrade if insight_embeddings grows to thousands of rows.
+  return Array.from(new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4));
 }
 
 /** Opens (creating parent dirs as needed) the SQLite file at `path` and ensures schema exists. */

@@ -296,4 +296,50 @@ describe('pipeline', () => {
     const episodeCount = db.prepare('SELECT COUNT(*) as count FROM episodes').get() as { count: number };
     expect(episodeCount.count).toBe(0);
   });
+
+  it('embeddings disabled: no rows inserted into insight_embeddings', async () => {
+    const now = new Date().toISOString();
+    const scanResult: ScanResult = {
+      projectDir: '/tmp/test-project',
+      sessionId: 'session-1',
+      filePath: '/tmp/test-project/session-1.jsonl',
+      lines: [
+        {
+          lineNumber: 1,
+          timestamp: now,
+          kind: 'tool' as const,
+          toolName: 'test',
+          text: 'test line',
+        },
+      ],
+      maxLineNumber: 100,
+    };
+
+    const insights: Insight[] = [
+      {
+        episodeId: 0,
+        category: 'strategic_value',
+        text: 'Test insight',
+        evidenceRef: 'line 50',
+        significanceScore: 0.8,
+        verifiedByGit: null,
+        recurrenceOf: null,
+        createdAt: now,
+      },
+    ];
+
+    const { scanNewLines } = await import('../src/ingest/index.js');
+    const { runExtraction } = await import('../src/extract/index.js');
+
+    vi.mocked(scanNewLines).mockResolvedValueOnce([scanResult]);
+    vi.mocked(runExtraction).mockResolvedValueOnce(insights);
+
+    await runDailyAnalysis({
+      db,
+      force: false,
+    });
+
+    const count = db.prepare('SELECT COUNT(*) as count FROM insight_embeddings').get() as { count: number };
+    expect(count.count).toBe(0);
+  });
 });
