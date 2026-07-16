@@ -126,11 +126,11 @@ export async function generateCandidates(
     const response = (await client.beta.promptCaching.messages.create({
       model: 'claude-haiku-4-5',
       max_tokens: 8192,
-      // Pinned to 0 (not left at the API default of 1.0) so identical
-      // episode input produces near-identical extraction across repeated
-      // runs of the same session — greedy decoding instead of sampled.
-      // Zero cost/latency tradeoff (temperature doesn't affect pricing or
-      // speed, only token-selection determinism).
+      // Pinned to 0 for run-to-run consistency — confirmed claude-haiku-4-5
+      // accepts this param (unlike claude-sonnet-5, used in sonnet.ts and
+      // synthesis.ts, which rejects `temperature` outright with a 400
+      // "deprecated for this model" — confirmed against the real API at
+      // both 0 and 0.3, do not re-add it there without re-verifying).
       temperature: 0,
       system: [
         {

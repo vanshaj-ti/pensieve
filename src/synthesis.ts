@@ -63,8 +63,7 @@ Write the one-paragraph narrative summary now.`;
     const response = await anthropicClient.beta.promptCaching.messages.create({
       model: 'claude-sonnet-5',
       max_tokens: 1024,
-      // See src/extract/haiku.ts for why this is pinned to 0.
-      temperature: 0,
+      // NOTE: do NOT set `temperature` here — see src/extract/haiku.ts.
       system: [
         {
           type: 'text',
