@@ -8,6 +8,7 @@ import {
   getTopInsights,
   getRecurrenceChains,
   getCrossProjectRollup,
+  getEffortBreakdown,
 } from '../src/analytics/index.js';
 
 describe('analytics', () => {
@@ -526,6 +527,95 @@ describe('analytics', () => {
       expect(result[0]?.insightCount).toBe(3);
       expect(result[1]?.insightCount).toBe(1);
       expect(result[2]?.insightCount).toBe(1);
+    });
+  });
+
+  describe('getEffortBreakdown', () => {
+    it('returns all-zero breakdown for a date with no insights', () => {
+      const result = getEffortBreakdown(db, '2026-07-15');
+      expect(result).toEqual({
+        toil: 0,
+        judgment: 0,
+        overhead: 0,
+        total: 0,
+        toilRatio: 0,
+        judgmentRatio: 0,
+        overheadRatio: 0,
+      });
+    });
+
+    it('counts and computes ratios across all three effort classes', () => {
+      db.prepare(
+        `
+        INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
+        VALUES ('2026-07-15', '/tmp/project', 'session-1', 1, 10)
+      `,
+      ).run();
+
+      db.prepare(
+        `
+        INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, effort_class, verified_by_git, recurrence_of, created_at)
+        VALUES (1, 'friction_audit', 'Toil A', 'ref1', 3, 'toil', NULL, NULL, '2026-07-15T10:00:00Z'),
+               (1, 'friction_audit', 'Toil B', 'ref2', 3, 'toil', NULL, NULL, '2026-07-15T10:00:00Z'),
+               (1, 'decision_record', 'Judgment A', 'ref3', 4, 'judgment', NULL, NULL, '2026-07-15T10:00:00Z'),
+               (1, 'strategic_value', 'Overhead A', 'ref4', 2, 'overhead', NULL, NULL, '2026-07-15T10:00:00Z')
+      `,
+      ).run();
+
+      const result = getEffortBreakdown(db, '2026-07-15');
+      expect(result.toil).toBe(2);
+      expect(result.judgment).toBe(1);
+      expect(result.overhead).toBe(1);
+      expect(result.total).toBe(4);
+      expect(result.toilRatio).toBeCloseTo(0.5);
+      expect(result.judgmentRatio).toBeCloseTo(0.25);
+      expect(result.overheadRatio).toBeCloseTo(0.25);
+    });
+
+    it('scopes to the given date, excluding other dates', () => {
+      db.prepare(
+        `
+        INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
+        VALUES ('2026-07-15', '/tmp/project', 'session-1', 1, 5),
+               ('2026-07-16', '/tmp/project', 'session-1', 6, 10)
+      `,
+      ).run();
+
+      db.prepare(
+        `
+        INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, effort_class, verified_by_git, recurrence_of, created_at)
+        VALUES (1, 'friction_audit', 'In scope', 'ref1', 3, 'toil', NULL, NULL, '2026-07-15T10:00:00Z'),
+               (2, 'friction_audit', 'Out of scope', 'ref2', 3, 'judgment', NULL, NULL, '2026-07-16T10:00:00Z')
+      `,
+      ).run();
+
+      const result = getEffortBreakdown(db, '2026-07-15');
+      expect(result.total).toBe(1);
+      expect(result.toil).toBe(1);
+      expect(result.judgment).toBe(0);
+    });
+
+    it('defaults to judgment for pre-existing rows relying on the DB column default', () => {
+      db.prepare(
+        `
+        INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
+        VALUES ('2026-07-15', '/tmp/project', 'session-1', 1, 5)
+      `,
+      ).run();
+
+      // No effort_class column specified — relies on the ALTER TABLE ...
+      // DEFAULT 'judgment' from initSchema's migration.
+      db.prepare(
+        `
+        INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
+        VALUES (1, 'strategic_value', 'Pre-existing insight', 'ref1', 3, NULL, NULL, '2026-07-15T10:00:00Z')
+      `,
+      ).run();
+
+      const result = getEffortBreakdown(db, '2026-07-15');
+      expect(result.judgment).toBe(1);
+      expect(result.toil).toBe(0);
+      expect(result.overhead).toBe(0);
     });
   });
 });

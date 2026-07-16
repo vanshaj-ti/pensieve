@@ -8,9 +8,11 @@ import {
   getTopInsights,
   getRecurrenceChains,
   getCrossProjectRollup,
+  getEffortBreakdown,
   type TopInsight,
   type RecurrenceChain,
   type ProjectRollup,
+  type EffortBreakdown,
 } from './analytics/index.js';
 
 export interface BriefOptions {
@@ -47,8 +49,18 @@ export function renderBriefMarkdown(
   topInsights: TopInsight[] = [],
   recurrenceChains: RecurrenceChain[] = [],
   crossProjectRollup: ProjectRollup[] = [],
+  effortBreakdown?: EffortBreakdown,
 ): string {
   const lines: string[] = [`# Pensieve Brief — ${date}\n`];
+
+  if (effortBreakdown && effortBreakdown.total > 0) {
+    const pct = (r: number) => `${Math.round(r * 100)}%`;
+    lines.push(`## Effort Breakdown\n`);
+    lines.push(
+      `${pct(effortBreakdown.judgmentRatio)} judgment, ${pct(effortBreakdown.toilRatio)} toil, ${pct(effortBreakdown.overheadRatio)} overhead (${effortBreakdown.total} insights today)`,
+    );
+    lines.push('');
+  }
 
   if (topInsights.length > 0) {
     lines.push(`## Top Insights Today\n`);
@@ -204,6 +216,7 @@ export function writeBrief(options: BriefOptions): { path: string; insightCount:
   const topInsights = getTopInsights(db, date, 5);
   const recurrenceChains = getRecurrenceChains(db, 30);
   const crossProjectRollup = getCrossProjectRollup(db, date);
+  const effortBreakdown = getEffortBreakdown(db, date);
 
   const markdown = renderBriefMarkdown(
     insightsWithDates,
@@ -211,6 +224,7 @@ export function writeBrief(options: BriefOptions): { path: string; insightCount:
     topInsights,
     recurrenceChains,
     crossProjectRollup,
+    effortBreakdown,
   );
 
   // Create directory and write file

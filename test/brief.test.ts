@@ -539,4 +539,39 @@ describe('brief', () => {
     // 3 occurrences over 5 elapsed days (07-10 to 07-15)
     expect(fileContent).toContain('recurred 3 times over 5 days');
   });
+
+  it('renders Effort Breakdown section with ratios when insights exist', () => {
+    db.prepare(
+      `
+      INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
+      VALUES ('2026-07-15', '/tmp/project', 'session-1', 1, 10)
+    `,
+    ).run();
+
+    db.prepare(
+      `
+      INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, effort_class, verified_by_git, recurrence_of, created_at)
+      VALUES (1, 'friction_audit', 'Toil insight', 'ref1', 3, 'toil', NULL, NULL, '2026-07-15T10:00:00Z'),
+             (1, 'decision_record', 'Judgment insight', 'ref2', 4, 'judgment', NULL, NULL, '2026-07-15T10:00:00Z'),
+             (1, 'decision_record', 'Judgment insight 2', 'ref3', 4, 'judgment', NULL, NULL, '2026-07-15T10:00:00Z'),
+             (1, 'strategic_value', 'Overhead insight', 'ref4', 2, 'overhead', NULL, NULL, '2026-07-15T10:00:00Z')
+    `,
+    ).run();
+
+    const result = writeBrief({ db, date: '2026-07-15', briefsDir });
+    const fileContent = readFileSync(result.path, 'utf-8');
+
+    expect(fileContent).toContain('## Effort Breakdown');
+    expect(fileContent).toContain('50% judgment');
+    expect(fileContent).toContain('25% toil');
+    expect(fileContent).toContain('25% overhead');
+    expect(fileContent).toContain('4 insights today');
+  });
+
+  it('omits Effort Breakdown section when there are no insights for the date', () => {
+    const result = writeBrief({ db, date: '2026-07-15', briefsDir });
+    const fileContent = readFileSync(result.path, 'utf-8');
+
+    expect(fileContent).not.toContain('## Effort Breakdown');
+  });
 });
