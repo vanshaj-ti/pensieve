@@ -63,7 +63,10 @@ export function AnalyticsPage({ filter, scopeLabel, route }: Props) {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // filterKey is a stable JSON-stringified proxy for filter's identity;
+    // intentionally excluding `filter` itself to avoid re-running on every
+    // render (filter is a fresh object each render since it's derived from
+    // the route in App.tsx).
   }, [filterKey]);
 
   const reload = useCallback(() => {
@@ -98,7 +101,7 @@ export function AnalyticsPage({ filter, scopeLabel, route }: Props) {
         },
       )
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load data'));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Same filterKey rationale as above.
   }, [date, filterKey]);
 
   useEffect(() => {
