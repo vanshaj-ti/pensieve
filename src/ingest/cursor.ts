@@ -1,10 +1,6 @@
 import type Database from 'better-sqlite3';
 
-export function getCursor(
-  db: Database.Database,
-  projectDir: string,
-  sessionId: string,
-): number {
+export function getCursor(db: Database.Database, projectDir: string, sessionId: string): number {
   const row = db
     .prepare('SELECT last_line FROM sessions WHERE project_dir = ? AND session_id = ?')
     .get(projectDir, sessionId) as { last_line: number } | undefined;

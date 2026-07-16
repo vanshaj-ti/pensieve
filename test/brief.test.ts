@@ -93,15 +93,19 @@ describe('brief', () => {
 
   it('writeBrief creates directory and writes file', () => {
     // Pre-populate with insights
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
       VALUES ('2026-07-15', '/tmp/project', 'session-1', 1, 10)
-    `).run();
+    `,
+    ).run();
 
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
       VALUES (1, 'strategic_value', 'Test insight', 'evidence', 0.8, NULL, NULL, '2026-07-15T10:00:00Z')
-    `).run();
+    `,
+    ).run();
 
     const result = writeBrief({
       db,
@@ -119,26 +123,34 @@ describe('brief', () => {
 
   it('groups insights correctly across multiple dates', () => {
     // Insert episodes for multiple dates
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
       VALUES ('2026-07-14', '/tmp/project', 'session-1', 1, 5)
-    `).run();
+    `,
+    ).run();
 
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
       VALUES ('2026-07-15', '/tmp/project', 'session-1', 6, 10)
-    `).run();
+    `,
+    ).run();
 
     // Insert insights for both dates
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
       VALUES (1, 'strategic_value', 'Old insight', 'old', 0.8, NULL, NULL, '2026-07-14T10:00:00Z')
-    `).run();
+    `,
+    ).run();
 
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
       VALUES (2, 'decision_record', 'New insight', 'new', 0.7, NULL, NULL, '2026-07-15T10:00:00Z')
-    `).run();
+    `,
+    ).run();
 
     const result = writeBrief({
       db,
@@ -213,23 +225,29 @@ describe('brief', () => {
 
   it('renders recurrence note with source date', () => {
     // Insert referenced insight with known date
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
       VALUES ('2026-07-10', '/tmp/project', 'session-1', 1, 5)
-    `).run();
+    `,
+    ).run();
 
     const refId = db
-      .prepare(`
+      .prepare(
+        `
         INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
         VALUES (1, 'strategic_value', 'Original insight', 'old', 0.9, NULL, NULL, '2026-07-10T10:00:00Z')
-      `)
+      `,
+      )
       .run().lastInsertRowid;
 
     // Insert current day's episode
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
       VALUES ('2026-07-15', '/tmp/project', 'session-1', 6, 10)
-    `).run();
+    `,
+    ).run();
 
     const insights: Insight[] = [
       {
@@ -253,34 +271,44 @@ describe('brief', () => {
 
   it('writeBrief queries real DB and preserves recurrence/verified markers', () => {
     // Set up two episodes on different dates
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
       VALUES ('2026-07-10', '/tmp/project', 'session-1', 1, 5)
-    `).run();
+    `,
+    ).run();
 
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
       VALUES ('2026-07-15', '/tmp/project', 'session-1', 6, 10)
-    `).run();
+    `,
+    ).run();
 
     // Insert referenced insight
     const refId = db
-      .prepare(`
+      .prepare(
+        `
         INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
         VALUES (1, 'strategic_value', 'Original', 'old', 0.9, 1, NULL, '2026-07-10T10:00:00Z')
-      `)
+      `,
+      )
       .run().lastInsertRowid;
 
     // Insert current day's insights: one verified, one recurring
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
       VALUES (2, 'decision_record', 'Verified decision', 'git', 0.8, 1, NULL, '2026-07-15T10:00:00Z')
-    `).run();
+    `,
+    ).run();
 
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
       VALUES (2, 'friction_audit', 'Recurring friction', 'notes', 0.6, NULL, ?, '2026-07-15T10:00:00Z')
-    `).run(refId);
+    `,
+    ).run(refId);
 
     const result = writeBrief({
       db,

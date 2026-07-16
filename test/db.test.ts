@@ -26,9 +26,9 @@ function columnNames(table: string): string[] {
 
 describe('initSchema', () => {
   it('creates sessions, episodes, insights tables', () => {
-    const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[]).map(
-      (t) => t.name,
-    );
+    const tables = (
+      db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[]
+    ).map((t) => t.name);
     expect(tables).toEqual(expect.arrayContaining(['sessions', 'episodes', 'insights']));
   });
 
@@ -65,9 +65,9 @@ describe('initSchema', () => {
   });
 
   it('creates insight_embeddings table', () => {
-    const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[]).map(
-      (t) => t.name,
-    );
+    const tables = (
+      db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[]
+    ).map((t) => t.name);
     expect(tables).toContain('insight_embeddings');
   });
 
@@ -78,29 +78,37 @@ describe('initSchema', () => {
   });
 
   it('insight_embeddings enforces primary key on insight_id', () => {
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
       VALUES (?, ?, ?, ?, ?)
-    `).run('2024-01-01', '/tmp', 'sess1', 1, 10);
+    `,
+    ).run('2024-01-01', '/tmp', 'sess1', 1, 10);
 
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(1, 'strategic_value', 'test', 'line 1', 0.8, null, null, '2024-01-01T00:00:00Z');
+    `,
+    ).run(1, 'strategic_value', 'test', 'line 1', 0.8, null, null, '2024-01-01T00:00:00Z');
 
     const embedding = [0.1, 0.2, 0.3];
     const packed = packEmbedding(embedding);
 
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO insight_embeddings (insight_id, embedding, model, created_at)
       VALUES (?, ?, ?, ?)
-    `).run(1, packed, 'text-embedding-3-small', '2024-01-01T00:00:00Z');
+    `,
+    ).run(1, packed, 'text-embedding-3-small', '2024-01-01T00:00:00Z');
 
     expect(() => {
-      db.prepare(`
+      db.prepare(
+        `
         INSERT INTO insight_embeddings (insight_id, embedding, model, created_at)
         VALUES (?, ?, ?, ?)
-      `).run(1, packed, 'text-embedding-3-small', '2024-01-01T00:00:00Z');
+      `,
+      ).run(1, packed, 'text-embedding-3-small', '2024-01-01T00:00:00Z');
     }).toThrow();
   });
 });

@@ -244,7 +244,10 @@ describe('splitEpisodes', () => {
   it('does not split a small episode that fits comfortably under the token budget', () => {
     const d1 = new Date(2026, 6, 15, 10, 0, 0);
     const d2 = new Date(2026, 6, 15, 10, 1, 0);
-    const lines = [createLine(1, 'user', d1.toISOString()), createLine(2, 'assistant', d2.toISOString())];
+    const lines = [
+      createLine(1, 'user', d1.toISOString()),
+      createLine(2, 'assistant', d2.toISOString()),
+    ];
 
     const result = splitEpisodes(lines, defaultConfig);
     expect(result).toHaveLength(1);

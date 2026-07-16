@@ -38,10 +38,12 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
   // proxy with the wrong auth scheme — a bare sk-ant-... key doesn't satisfy
   // the proxy's expected header, producing a 401 that looked like a bad key
   // but was actually a request going to the wrong endpoint entirely.
-  const client = options.client ?? new Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY,
-    baseURL: 'https://api.anthropic.com',
-  });
+  const client =
+    options.client ??
+    new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY,
+      baseURL: 'https://api.anthropic.com',
+    });
 
   const scanResults = await scanNewLines(db, {
     claudeProjectsDir: options.claudeProjectsDir,

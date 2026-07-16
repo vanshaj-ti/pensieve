@@ -76,7 +76,7 @@ describe('applyEmbeddingRecurrence', () => {
     embeddingsAuthScheme: 'Bearer',
     embeddingsExtraHeaders: {},
     embeddingsPath: '/v1/embeddings',
-    recurrenceSimilarityThreshold: 0.90,
+    recurrenceSimilarityThreshold: 0.9,
   };
 
   beforeEach(() => {
@@ -84,10 +84,12 @@ describe('applyEmbeddingRecurrence', () => {
     initSchema(db);
 
     // Insert dummy episode
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
       VALUES (?, ?, ?, ?, ?)
-    `).run('2024-01-01', '/tmp', 'sess1', 1, 10);
+    `,
+    ).run('2024-01-01', '/tmp', 'sess1', 1, 10);
   });
 
   it('returns insights unchanged if embeddings disabled', async () => {
@@ -129,18 +131,27 @@ describe('applyEmbeddingRecurrence', () => {
   it('preserves Sonnet guess when embedText fails mid-batch', async () => {
     // Insert recent embedding
     const oldInsight = db
-      .prepare(`
+      .prepare(
+        `
         INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `)
+      `,
+      )
       .run(1, 'strategic_value', 'old insight', 'line 1', 0.8, null, null, '2024-01-01T00:00:00Z');
 
     const oldId = oldInsight.lastInsertRowid as number;
 
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO insight_embeddings (insight_id, embedding, model, created_at)
       VALUES (?, ?, ?, ?)
-    `).run(oldId, Buffer.from(new Float32Array([1, 0]).buffer), 'text-embedding-3-small', '2024-01-01T00:00:00Z');
+    `,
+    ).run(
+      oldId,
+      Buffer.from(new Float32Array([1, 0]).buffer),
+      'text-embedding-3-small',
+      '2024-01-01T00:00:00Z',
+    );
 
     const insightsWithDisabledEmbeddings: Insight[] = [
       {
@@ -156,11 +167,10 @@ describe('applyEmbeddingRecurrence', () => {
     ];
 
     // Config disabled → embedText returns null, Sonnet's guess should stay
-    const result = await applyEmbeddingRecurrence(
-      insightsWithDisabledEmbeddings,
-      db,
-      { ...baseConfig, embeddingsBaseUrl: null }
-    );
+    const result = await applyEmbeddingRecurrence(insightsWithDisabledEmbeddings, db, {
+      ...baseConfig,
+      embeddingsBaseUrl: null,
+    });
 
     expect(result[0].insight.recurrenceOf).toBe(3); // Sonnet's guess preserved
   });
@@ -188,16 +198,25 @@ describe('applyEmbeddingRecurrence', () => {
   it('enabled path: real fetch-backed embedding above threshold sets recurrenceOf', async () => {
     // Prior insight stored with an embedding pointing along [1, 0].
     const oldInsight = db
-      .prepare(`
+      .prepare(
+        `
         INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `)
+      `,
+      )
       .run(1, 'friction_audit', 'old friction', 'line 1', 3, null, null, recentIso(1));
     const oldId = oldInsight.lastInsertRowid as number;
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO insight_embeddings (insight_id, embedding, model, created_at)
       VALUES (?, ?, ?, ?)
-    `).run(oldId, Buffer.from(new Float32Array([1, 0]).buffer), 'text-embedding-3-small', recentIso(1));
+    `,
+    ).run(
+      oldId,
+      Buffer.from(new Float32Array([1, 0]).buffer),
+      'text-embedding-3-small',
+      recentIso(1),
+    );
 
     // Mock fetch so embedText (enabled: embeddingsBaseUrl set) returns a
     // vector highly similar to the stored one — this exercises the actual
@@ -232,16 +251,25 @@ describe('applyEmbeddingRecurrence', () => {
 
   it('enabled path: low-similarity embedding does not set recurrenceOf', async () => {
     const oldInsight = db
-      .prepare(`
+      .prepare(
+        `
         INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `)
+      `,
+      )
       .run(1, 'friction_audit', 'unrelated old insight', 'line 1', 3, null, null, recentIso(1));
     const oldId = oldInsight.lastInsertRowid as number;
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO insight_embeddings (insight_id, embedding, model, created_at)
       VALUES (?, ?, ?, ?)
-    `).run(oldId, Buffer.from(new Float32Array([1, 0]).buffer), 'text-embedding-3-small', recentIso(1));
+    `,
+    ).run(
+      oldId,
+      Buffer.from(new Float32Array([1, 0]).buffer),
+      'text-embedding-3-small',
+      recentIso(1),
+    );
 
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

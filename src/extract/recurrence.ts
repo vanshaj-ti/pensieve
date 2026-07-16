@@ -43,10 +43,7 @@ interface RecentEmbedding {
   embedding: number[];
 }
 
-function getRecentInsightEmbeddings(
-  db: Database.Database,
-  days: number = 7
-): RecentEmbedding[] {
+function getRecentInsightEmbeddings(db: Database.Database, days: number = 7): RecentEmbedding[] {
   const cutoffDate = new Date();
   cutoffDate.setDate(cutoffDate.getDate() - days);
   const cutoffStr = cutoffDate.toISOString().split('T')[0];
@@ -101,7 +98,7 @@ async function embedAll(insights: Insight[], config: Config): Promise<InsightWit
  */
 export function dedupeInsightsByEmbedding(
   items: InsightWithEmbedding[],
-  threshold: number
+  threshold: number,
 ): InsightWithEmbedding[] {
   const n = items.length;
   const visited = new Array<boolean>(n).fill(false);
@@ -150,7 +147,7 @@ export function dedupeInsightsByEmbedding(
 export async function applyEmbeddingRecurrence(
   insights: Insight[],
   db: Database.Database,
-  config: Config
+  config: Config,
 ): Promise<InsightWithEmbedding[]> {
   if (!config.embeddingsBaseUrl) {
     return insights.map((insight) => ({

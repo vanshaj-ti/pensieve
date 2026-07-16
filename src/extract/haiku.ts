@@ -5,10 +5,15 @@ import type { ParsedLine } from '../ingest/parser.js';
 
 export class HaikuExtractionError extends Error {
   constructor(
-    public readonly episode: Pick<EpisodeDraft, 'projectDir' | 'sessionId' | 'startLine' | 'endLine'>,
+    public readonly episode: Pick<
+      EpisodeDraft,
+      'projectDir' | 'sessionId' | 'startLine' | 'endLine'
+    >,
     cause: unknown,
   ) {
-    super(`Haiku candidate generation failed for episode ${episode.sessionId}:${episode.startLine}-${episode.endLine}`);
+    super(
+      `Haiku candidate generation failed for episode ${episode.sessionId}:${episode.startLine}-${episode.endLine}`,
+    );
     this.cause = cause;
   }
 }
@@ -53,7 +58,12 @@ function renderLines(lines: ParsedLine[]): RenderedLine[] {
             if (typeof block === 'object' && block !== null) {
               if ('type' in block && block.type === 'text' && 'text' in block) {
                 textParts.push(String(block.text));
-              } else if ('type' in block && block.type === 'tool_use' && 'name' in block && 'input' in block) {
+              } else if (
+                'type' in block &&
+                block.type === 'tool_use' &&
+                'name' in block &&
+                'input' in block
+              ) {
                 textParts.push(`[tool_use: ${String(block.name)}] ${JSON.stringify(block.input)}`);
               } else if ('type' in block && block.type === 'tool_result' && 'content' in block) {
                 const trContent = block.content;
@@ -63,7 +73,13 @@ function renderLines(lines: ParsedLine[]): RenderedLine[] {
                 } else if (Array.isArray(trContent)) {
                   const trParts: string[] = [];
                   for (const item of trContent) {
-                    if (typeof item === 'object' && item !== null && 'type' in item && item.type === 'text' && 'text' in item) {
+                    if (
+                      typeof item === 'object' &&
+                      item !== null &&
+                      'type' in item &&
+                      item.type === 'text' &&
+                      'text' in item
+                    ) {
                       trParts.push(String(item.text));
                     }
                   }
@@ -169,7 +185,11 @@ export async function generateCandidates(
       throw new Error(`Expected tool_use named emit_candidates, got ${toolUse.name}`);
     }
 
-    if (typeof toolUse.input !== 'object' || toolUse.input === null || !('candidates' in toolUse.input)) {
+    if (
+      typeof toolUse.input !== 'object' ||
+      toolUse.input === null ||
+      !('candidates' in toolUse.input)
+    ) {
       throw new Error(
         `Tool input missing candidates field (stop_reason: ${(response as any).stop_reason}) — ` +
           'likely truncated by max_tokens if stop_reason is "max_tokens"',
@@ -186,7 +206,10 @@ export async function generateCandidates(
       return parsed;
     });
   } catch (error) {
-    console.error(`Haiku extraction error for episode ${episode.sessionId}:${episode.startLine}-${episode.endLine}:`, error);
+    console.error(
+      `Haiku extraction error for episode ${episode.sessionId}:${episode.startLine}-${episode.endLine}:`,
+      error,
+    );
     throw new HaikuExtractionError(episode, error);
   }
 }

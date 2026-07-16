@@ -448,7 +448,10 @@ describe('ingest', () => {
       }
 
       const db = openDb(dbPath);
-      const results = await scanNewLines(db, { claudeProjectsDir: projectsDir, projectFilter: 'proj1' });
+      const results = await scanNewLines(db, {
+        claudeProjectsDir: projectsDir,
+        projectFilter: 'proj1',
+      });
 
       expect(results).toHaveLength(1);
       expect(results[0].projectDir).toBe('proj1');
