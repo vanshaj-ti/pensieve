@@ -3,7 +3,7 @@ import Database from 'better-sqlite3';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { runDailyAnalysis } from '../src/pipeline.js';
-import { openDb, packEmbedding, unpackEmbedding } from '../src/db/schema.js';
+import { openDb } from '../src/db/schema.js';
 import { getCursor } from '../src/ingest/cursor.js';
 import type { ScanResult } from '../src/ingest/index.js';
 import type { Insight } from '../src/types.js';

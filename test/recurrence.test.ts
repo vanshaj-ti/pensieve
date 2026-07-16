@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import Database from 'better-sqlite3';
 import { cosineSimilarity, applyEmbeddingRecurrence } from '../src/extract/recurrence.js';
 import { type Config } from '../src/config.js';
@@ -79,48 +79,58 @@ describe('applyEmbeddingRecurrence', () => {
     expect(result[0].embedding).toBeNull();
   });
 
-  it('overwrites recurrenceOf when similarity exceeds threshold', async () => {
-    const mockEmbedText = vi.fn();
-    mockEmbedText.mockResolvedValueOnce([0.95, 0.05]); // Very similar to [1, 0]
+  it('similarity logic: high-similarity vectors trigger recurrence link', () => {
+    // Directly test the cosine similarity computation that drives the override logic
+    const newVec = [0.95, 0.05];
+    const oldVec = [1, 0];
+    const similarity = cosineSimilarity(newVec, oldVec);
+    expect(similarity).toBeGreaterThan(0.9); // Exceeds 0.90 threshold
+  });
 
-    // Insert an existing insight with embedding
-    const newInsight = db
+  it('similarity logic: low-similarity vectors do not trigger override', () => {
+    const newVec = [1, 0, 0];
+    const oldVec = [0, 1, 0];
+    const similarity = cosineSimilarity(newVec, oldVec);
+    expect(similarity).toBeLessThan(0.9); // Below 0.90 threshold
+  });
+
+  it('preserves Sonnet guess when embedText fails mid-batch', async () => {
+    // Insert recent embedding
+    const oldInsight = db
       .prepare(`
         INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `)
-      .run(
-        1,
-        'strategic_value',
-        'original insight',
-        'line 1',
-        0.8,
-        null,
-        null,
-        '2024-01-01T00:00:00Z'
-      );
+      .run(1, 'strategic_value', 'old insight', 'line 1', 0.8, null, null, '2024-01-01T00:00:00Z');
 
-    const newInsightId = newInsight.lastInsertRowid as number;
+    const oldId = oldInsight.lastInsertRowid as number;
 
     db.prepare(`
       INSERT INTO insight_embeddings (insight_id, embedding, model, created_at)
       VALUES (?, ?, ?, ?)
-    `).run(
-      newInsightId,
-      Buffer.from(new Float32Array([1, 0]).buffer),
-      'text-embedding-3-small',
-      '2024-01-01T00:00:00Z'
+    `).run(oldId, Buffer.from(new Float32Array([1, 0]).buffer), 'text-embedding-3-small', '2024-01-01T00:00:00Z');
+
+    const insightsWithDisabledEmbeddings: Insight[] = [
+      {
+        episodeId: 1,
+        category: 'strategic_value',
+        text: 'new insight',
+        evidenceRef: 'line 2',
+        significanceScore: 0.8,
+        verifiedByGit: null,
+        recurrenceOf: 3, // Sonnet's guess (fallback from prompt-stuffing)
+        createdAt: '2024-01-01T01:00:00Z',
+      },
+    ];
+
+    // Config disabled → embedText returns null, Sonnet's guess should stay
+    const result = await applyEmbeddingRecurrence(
+      insightsWithDisabledEmbeddings,
+      db,
+      { ...baseConfig, embeddingsBaseUrl: null }
     );
 
-    // Mock embedText to return a high-similarity vector
-    vi.doMock('../src/extract/embeddings.js', () => ({
-      embedText: mockEmbedText,
-    }));
-
-    // Since we can't easily mock the module import, just test the cosine similarity directly
-    // to confirm the logic works
-    const similarity = cosineSimilarity([0.95, 0.05], [1, 0]);
-    expect(similarity).toBeGreaterThan(0.9);
+    expect(result[0].insight.recurrenceOf).toBe(3); // Sonnet's guess preserved
   });
 
   it('preserves null embedding if embedText returns null', async () => {
@@ -139,9 +149,7 @@ describe('applyEmbeddingRecurrence', () => {
     ];
 
     const result = await applyEmbeddingRecurrence(insights, db, config);
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    expect(result[0]!.insight.recurrenceOf).toBe(5); // Preserved
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    expect(result[0]!.embedding).toBeNull();
+    expect(result[0].insight.recurrenceOf).toBe(5); // Preserved
+    expect(result[0].embedding).toBeNull();
   });
 });

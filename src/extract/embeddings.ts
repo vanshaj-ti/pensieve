@@ -2,6 +2,9 @@ import { Config } from '../config.js';
 import { EmbeddingResponseSchema } from '../types.js';
 
 let warnedAboutDisabled = false;
+let warnedAboutHttpError = false;
+let warnedAboutParseError = false;
+let warnedAboutFetchError = false;
 
 export async function embedText(text: string, config: Config): Promise<number[] | null> {
   if (!config.embeddingsBaseUrl || !config.embeddingsApiKey) {
@@ -34,7 +37,10 @@ export async function embedText(text: string, config: Config): Promise<number[] 
     });
 
     if (!resp.ok) {
-      console.error(`Embeddings HTTP error ${resp.status} from ${url}`);
+      if (!warnedAboutHttpError) {
+        console.error(`Embeddings HTTP error ${resp.status} from ${url} (further embeddings HTTP errors this run will be suppressed)`);
+        warnedAboutHttpError = true;
+      }
       return null;
     }
 
@@ -42,13 +48,19 @@ export async function embedText(text: string, config: Config): Promise<number[] 
     const parsed = EmbeddingResponseSchema.safeParse(data);
 
     if (!parsed.success) {
-      console.error('Embeddings response schema validation failed', parsed.error);
+      if (!warnedAboutParseError) {
+        console.error('Embeddings response schema validation failed (further parse errors this run will be suppressed)', parsed.error);
+        warnedAboutParseError = true;
+      }
       return null;
     }
 
     return parsed.data.data[0].embedding;
   } catch (err) {
-    console.error('Embeddings fetch error:', err instanceof Error ? err.message : String(err));
+    if (!warnedAboutFetchError) {
+      console.error('Embeddings fetch error (further fetch errors this run will be suppressed):', err instanceof Error ? err.message : String(err));
+      warnedAboutFetchError = true;
+    }
     return null;
   }
 }

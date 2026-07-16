@@ -48,6 +48,7 @@ export function packEmbedding(vec: number[]): Buffer {
 }
 
 export function unpackEmbedding(buf: Buffer): number[] {
+  // Note: sqlite-vec would be the natural upgrade if insight_embeddings grows to thousands of rows.
   return Array.from(new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4));
 }
 
