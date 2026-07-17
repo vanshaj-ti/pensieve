@@ -91,9 +91,26 @@ export interface AnalyticsFilter {
 export interface DiskSession {
   projectDir: string;
   sessionId: string;
+  cwd: string | null;
+  title: string | null;
   mtime: string;
   analyzed: boolean;
   runCount: number;
+}
+
+export interface PaginatedSessions {
+  sessions: DiskSession[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface SessionProject {
+  projectDir: string;
+  cwd: string | null;
+  sessionCount: number;
+  analyzedCount: number;
 }
 
 export interface SessionRun {

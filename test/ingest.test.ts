@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { parseSessionLines } from '../src/ingest/parser.js';
-import { listSessionFiles, needsScan } from '../src/ingest/scanner.js';
+import { listSessionFiles, needsScan, readSessionMetadata } from '../src/ingest/scanner.js';
 import {
   getCursor,
   getLastRunAt,
@@ -239,6 +239,52 @@ describe('ingest', () => {
 
     it('needsScan returns true when file does not exist', () => {
       expect(needsScan(join(tempDir, 'nonexistent.jsonl'), '2026-01-01T00:00:00Z')).toBe(true);
+    });
+
+    describe('readSessionMetadata', () => {
+      it('extracts cwd and the last non-empty aiTitle', () => {
+        const jsonl = join(tempDir, 'meta.jsonl');
+        const lines = [
+          JSON.stringify({ type: 'mode', sessionId: 'abc' }),
+          JSON.stringify({ cwd: '/Users/vanshaj/Pensieve', aiTitle: 'first draft title' }),
+          JSON.stringify({ aiTitle: 'refined title' }),
+          JSON.stringify({ aiTitle: '' }), // empty aiTitle should not overwrite
+        ].join('\n');
+        writeFileSync(jsonl, lines);
+
+        const result = readSessionMetadata(jsonl);
+        expect(result.cwd).toBe('/Users/vanshaj/Pensieve');
+        expect(result.title).toBe('refined title');
+      });
+
+      it('returns nulls when neither field is present', () => {
+        const jsonl = join(tempDir, 'no-meta.jsonl');
+        writeFileSync(jsonl, JSON.stringify({ type: 'mode' }));
+
+        const result = readSessionMetadata(jsonl);
+        expect(result.cwd).toBeNull();
+        expect(result.title).toBeNull();
+      });
+
+      it('skips malformed lines without throwing', () => {
+        const jsonl = join(tempDir, 'malformed.jsonl');
+        const lines = [
+          JSON.stringify({ cwd: '/tmp/project' }),
+          '{not valid json',
+          JSON.stringify({ aiTitle: 'valid title' }),
+        ].join('\n');
+        writeFileSync(jsonl, lines);
+
+        const result = readSessionMetadata(jsonl);
+        expect(result.cwd).toBe('/tmp/project');
+        expect(result.title).toBe('valid title');
+      });
+
+      it('returns nulls for a nonexistent file', () => {
+        const result = readSessionMetadata(join(tempDir, 'nonexistent.jsonl'));
+        expect(result.cwd).toBeNull();
+        expect(result.title).toBeNull();
+      });
     });
   });
 

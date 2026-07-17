@@ -319,12 +319,57 @@ describe('dashboard server', () => {
     });
   });
 
-  describe('GET /api/sessions/all', () => {
-    it('returns 200 with an array (real disk scan, contents not asserted)', async () => {
-      const res = await fetch(`http://localhost:${port}/api/sessions/all`);
+  describe('GET /api/session-projects', () => {
+    it('returns a list (real disk scan, contents not asserted)', async () => {
+      const res = await fetch(`http://localhost:${port}/api/session-projects`);
       expect(res.status).toBe(200);
       const apiData = await res.json();
       expect(Array.isArray(apiData)).toBe(true);
+      if (apiData.length > 0) {
+        expect(apiData[0]).toHaveProperty('projectDir');
+        expect(apiData[0]).toHaveProperty('sessionCount');
+        expect(apiData[0]).toHaveProperty('analyzedCount');
+      }
+    });
+  });
+
+  describe('GET /api/sessions/all', () => {
+    it('returns 400 when project param is missing', async () => {
+      const res = await fetch(`http://localhost:${port}/api/sessions/all`);
+      expect(res.status).toBe(400);
+    });
+
+    it('returns a paginated shape scoped to a project (real disk scan)', async () => {
+      const projectsRes = await fetch(`http://localhost:${port}/api/session-projects`);
+      const projects = await projectsRes.json();
+      if (projects.length === 0) return; // nothing to scope to in this test environment
+
+      const res = await fetch(
+        `http://localhost:${port}/api/sessions/all?project=${encodeURIComponent(projects[0].projectDir)}`,
+      );
+      expect(res.status).toBe(200);
+      const apiData = await res.json();
+      expect(Array.isArray(apiData.sessions)).toBe(true);
+      expect(apiData.page).toBe(1);
+      expect(apiData.pageSize).toBe(20);
+      expect(typeof apiData.total).toBe('number');
+      expect(typeof apiData.totalPages).toBe('number');
+    });
+
+    it('caps pageSize at 100', async () => {
+      const res = await fetch(
+        `http://localhost:${port}/api/sessions/all?project=/project-a&pageSize=500`,
+      );
+      expect(res.status).toBe(200);
+      const apiData = await res.json();
+      expect(apiData.pageSize).toBe(100);
+    });
+
+    it('returns 400 for invalid page', async () => {
+      const res = await fetch(
+        `http://localhost:${port}/api/sessions/all?project=/project-a&page=abc`,
+      );
+      expect(res.status).toBe(400);
     });
   });
 
