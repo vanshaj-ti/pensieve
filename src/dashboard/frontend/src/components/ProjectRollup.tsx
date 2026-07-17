@@ -14,7 +14,7 @@ export function ProjectRollup({ projects }: Props) {
       <thead>
         <tr>
           <th>Project</th>
-          <th>Insights</th>
+          <th>Work Items</th>
         </tr>
       </thead>
       <tbody>
