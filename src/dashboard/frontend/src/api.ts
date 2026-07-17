@@ -2,6 +2,7 @@ import type {
   AnalyticsFilter,
   AnalyzeJob,
   CategoryTrendPoint,
+  DerivedInsight,
   PaginatedSessions,
   SessionProject,
   EffortBreakdown,
@@ -136,6 +137,35 @@ export async function postAnalyzeSession(
 
 export const fetchAnalyzeJob = (jobId: string) =>
   fetchJson<AnalyzeJob>(`/api/sessions/analyze/${encodeURIComponent(jobId)}`, 'analyze job');
+
+export const fetchDerivedInsights = (projectDir: string, sessionId: string, label?: string) =>
+  fetchJson<DerivedInsight[]>(
+    `/api/derived-insights${buildQuery({ project: projectDir, session: sessionId, label })}`,
+    'derived insights',
+  );
+
+export async function postDeriveInsights(
+  projectDir: string,
+  sessionId: string,
+  label: string,
+): Promise<{ jobId: string }> {
+  const res = await fetch('/api/sessions/derive-insights', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectDir, sessionId, label }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}) as { error?: string });
+    throw new Error(data.error || 'Failed to start derive-insights job');
+  }
+  return res.json();
+}
+
+export const fetchDeriveInsightsJob = (jobId: string) =>
+  fetchJson<AnalyzeJob>(
+    `/api/sessions/derive-insights/${encodeURIComponent(jobId)}`,
+    'derive insights job',
+  );
 
 export async function postLabel(
   projectDir: string,

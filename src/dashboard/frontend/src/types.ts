@@ -1,12 +1,26 @@
 export type InsightCategory =
-  | 'strategic_value'
-  | 'decision_record'
+  | 'architecture_decisions'
+  | 'exploration'
+  | 'mechanical_labor'
+  | 'bug_fix'
+  | 'ai_correction_load'
   | 'friction_audit'
-  | 'high_potential_seeds'
-  | 'ai_leverage'
-  | 'ai_correction_load';
+  | 'high_potential_seeds';
 
 export type EffortClass = 'toil' | 'judgment' | 'overhead';
+
+export type DerivedInsightType = 'struggle' | 'win' | 'learning' | 'idea' | 'risk';
+
+export interface DerivedInsight {
+  id?: number;
+  projectDir: string;
+  sessionId: string;
+  label: string;
+  insightType: DerivedInsightType;
+  text: string;
+  evidenceInsightIds: number[];
+  createdAt: string;
+}
 
 export interface Insight {
   id?: number;

@@ -26,7 +26,7 @@ describe('brief', () => {
     const insights: Insight[] = [
       {
         episodeId: 1,
-        category: 'ai_leverage',
+        category: 'mechanical_labor',
         text: 'Used AI effectively',
         evidenceRef: 'session 123',
         significanceScore: 0.8,
@@ -36,7 +36,7 @@ describe('brief', () => {
       },
       {
         episodeId: 1,
-        category: 'strategic_value',
+        category: 'architecture_decisions',
         text: 'Prevented a bug',
         evidenceRef: 'code review',
         significanceScore: 0.9,
@@ -46,7 +46,7 @@ describe('brief', () => {
       },
       {
         episodeId: 1,
-        category: 'decision_record',
+        category: 'exploration',
         text: 'Chose async over sync',
         evidenceRef: 'architecture',
         significanceScore: 0.7,
@@ -58,23 +58,24 @@ describe('brief', () => {
 
     const markdown = renderBriefMarkdown(insights, '2026-07-15');
 
-    // Check that Strategic Value comes before Decision Record before AI Leverage
-    const strategicIdx = markdown.indexOf('## Strategic Value');
-    const decisionIdx = markdown.indexOf('## Decision Record');
-    const aiIdx = markdown.indexOf('## AI Leverage');
+    // CATEGORY_ORDER is: architecture_decisions, exploration, bug_fix,
+    // friction_audit, ai_correction_load, high_potential_seeds, mechanical_labor
+    const architectureIdx = markdown.indexOf('## Architecture Decisions');
+    const explorationIdx = markdown.indexOf('## Exploration');
+    const mechanicalIdx = markdown.indexOf('## Mechanical Labor');
 
-    expect(strategicIdx).toBeGreaterThan(-1);
-    expect(decisionIdx).toBeGreaterThan(-1);
-    expect(aiIdx).toBeGreaterThan(-1);
-    expect(strategicIdx).toBeLessThan(decisionIdx);
-    expect(decisionIdx).toBeLessThan(aiIdx);
+    expect(architectureIdx).toBeGreaterThan(-1);
+    expect(explorationIdx).toBeGreaterThan(-1);
+    expect(mechanicalIdx).toBeGreaterThan(-1);
+    expect(architectureIdx).toBeLessThan(explorationIdx);
+    expect(explorationIdx).toBeLessThan(mechanicalIdx);
   });
 
   it('omits empty categories', async () => {
     const insights: Insight[] = [
       {
         episodeId: 1,
-        category: 'strategic_value',
+        category: 'architecture_decisions',
         text: 'Strategic insight',
         evidenceRef: 'test',
         significanceScore: 0.8,
@@ -86,7 +87,7 @@ describe('brief', () => {
 
     const markdown = renderBriefMarkdown(insights, '2026-07-15');
 
-    expect(markdown).toContain('## Strategic Value');
+    expect(markdown).toContain('## Architecture Decisions');
     expect(markdown).not.toContain('## Friction Audit');
     expect(markdown).not.toContain('## AI Correction Load');
   });
@@ -103,7 +104,7 @@ describe('brief', () => {
     db.prepare(
       `
       INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
-      VALUES (1, 'strategic_value', 'Test insight', 'evidence', 0.8, NULL, NULL, '2026-07-15T10:00:00Z')
+      VALUES (1, 'architecture_decisions', 'Test insight', 'evidence', 0.8, NULL, NULL, '2026-07-15T10:00:00Z')
     `,
     ).run();
 
@@ -119,7 +120,7 @@ describe('brief', () => {
 
     const fileContent = readFileSync(result.path, 'utf-8');
     expect(fileContent).toContain('Test insight');
-    expect(fileContent).toContain('Strategic Value');
+    expect(fileContent).toContain('Architecture Decisions');
   });
 
   it('groups insights correctly across multiple dates', async () => {
@@ -142,14 +143,14 @@ describe('brief', () => {
     db.prepare(
       `
       INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
-      VALUES (1, 'strategic_value', 'Old insight', 'old', 0.8, NULL, NULL, '2026-07-14T10:00:00Z')
+      VALUES (1, 'architecture_decisions', 'Old insight', 'old', 0.8, NULL, NULL, '2026-07-14T10:00:00Z')
     `,
     ).run();
 
     db.prepare(
       `
       INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
-      VALUES (2, 'decision_record', 'New insight', 'new', 0.7, NULL, NULL, '2026-07-15T10:00:00Z')
+      VALUES (2, 'exploration', 'New insight', 'new', 0.7, NULL, NULL, '2026-07-15T10:00:00Z')
     `,
     ).run();
 
@@ -192,7 +193,7 @@ describe('brief', () => {
     const insights: Insight[] = [
       {
         episodeId: 1,
-        category: 'strategic_value',
+        category: 'architecture_decisions',
         text: 'Verified insight',
         evidenceRef: 'git commit',
         significanceScore: 0.9,
@@ -202,7 +203,7 @@ describe('brief', () => {
       },
       {
         episodeId: 1,
-        category: 'decision_record',
+        category: 'exploration',
         text: 'Unverified insight',
         evidenceRef: 'notes',
         significanceScore: 0.7,
@@ -238,7 +239,7 @@ describe('brief', () => {
       .prepare(
         `
         INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
-        VALUES (1, 'strategic_value', 'Original insight', 'old', 0.9, NULL, NULL, '2026-07-10T10:00:00Z')
+        VALUES (1, 'architecture_decisions', 'Original insight', 'old', 0.9, NULL, NULL, '2026-07-10T10:00:00Z')
       `,
       )
       .run().lastInsertRowid;
@@ -254,7 +255,7 @@ describe('brief', () => {
     const insights: Insight[] = [
       {
         episodeId: 2,
-        category: 'strategic_value',
+        category: 'architecture_decisions',
         text: 'Recurring insight',
         evidenceRef: 'new evidence',
         significanceScore: 0.85,
@@ -292,7 +293,7 @@ describe('brief', () => {
       .prepare(
         `
         INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
-        VALUES (1, 'strategic_value', 'Original', 'old', 0.9, 1, NULL, '2026-07-10T10:00:00Z')
+        VALUES (1, 'architecture_decisions', 'Original', 'old', 0.9, 1, NULL, '2026-07-10T10:00:00Z')
       `,
       )
       .run().lastInsertRowid;
@@ -301,7 +302,7 @@ describe('brief', () => {
     db.prepare(
       `
       INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
-      VALUES (2, 'decision_record', 'Verified decision', 'git', 0.8, 1, NULL, '2026-07-15T10:00:00Z')
+      VALUES (2, 'exploration', 'Verified decision', 'git', 0.8, 1, NULL, '2026-07-15T10:00:00Z')
     `,
     ).run();
 
@@ -339,9 +340,9 @@ describe('brief', () => {
     db.prepare(
       `
       INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
-      VALUES (1, 'strategic_value', 'Top insight', 'ref1', 0.95, NULL, NULL, '2026-07-15T10:00:00Z'),
+      VALUES (1, 'architecture_decisions', 'Top insight', 'ref1', 0.95, NULL, NULL, '2026-07-15T10:00:00Z'),
              (1, 'friction_audit', 'Mid insight', 'ref2', 0.5, NULL, NULL, '2026-07-15T10:00:00Z'),
-             (1, 'decision_record', 'High insight', 'ref3', 0.85, NULL, NULL, '2026-07-15T10:00:00Z')
+             (1, 'exploration', 'High insight', 'ref3', 0.85, NULL, NULL, '2026-07-15T10:00:00Z')
     `,
     ).run();
 
@@ -426,7 +427,7 @@ describe('brief', () => {
     db.prepare(
       `
       INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
-      VALUES (1, 'strategic_value', 'One-off insight', 'ref', 0.8, NULL, NULL, '2026-07-15T10:00:00Z')
+      VALUES (1, 'architecture_decisions', 'One-off insight', 'ref', 0.8, NULL, NULL, '2026-07-15T10:00:00Z')
     `,
     ).run();
 
@@ -454,9 +455,9 @@ describe('brief', () => {
     db.prepare(
       `
       INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
-      VALUES (1, 'strategic_value', 'Project 1 insight', 'ref1', 0.8, NULL, NULL, '2026-07-15T10:00:00Z'),
-             (2, 'strategic_value', 'Project 2 insight A', 'ref2', 0.7, NULL, NULL, '2026-07-15T10:00:00Z'),
-             (2, 'strategic_value', 'Project 2 insight B', 'ref3', 0.6, NULL, NULL, '2026-07-15T10:00:00Z')
+      VALUES (1, 'architecture_decisions', 'Project 1 insight', 'ref1', 0.8, NULL, NULL, '2026-07-15T10:00:00Z'),
+             (2, 'architecture_decisions', 'Project 2 insight A', 'ref2', 0.7, NULL, NULL, '2026-07-15T10:00:00Z'),
+             (2, 'architecture_decisions', 'Project 2 insight B', 'ref3', 0.6, NULL, NULL, '2026-07-15T10:00:00Z')
     `,
     ).run();
 
@@ -485,7 +486,7 @@ describe('brief', () => {
     db.prepare(
       `
       INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
-      VALUES (1, 'strategic_value', 'Single project insight', 'ref', 0.8, NULL, NULL, '2026-07-15T10:00:00Z')
+      VALUES (1, 'architecture_decisions', 'Single project insight', 'ref', 0.8, NULL, NULL, '2026-07-15T10:00:00Z')
     `,
     ).run();
 
@@ -561,9 +562,9 @@ describe('brief', () => {
       `
       INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, effort_class, verified_by_git, recurrence_of, created_at)
       VALUES (1, 'friction_audit', 'Toil insight', 'ref1', 3, 'toil', NULL, NULL, '2026-07-15T10:00:00Z'),
-             (1, 'decision_record', 'Judgment insight', 'ref2', 4, 'judgment', NULL, NULL, '2026-07-15T10:00:00Z'),
-             (1, 'decision_record', 'Judgment insight 2', 'ref3', 4, 'judgment', NULL, NULL, '2026-07-15T10:00:00Z'),
-             (1, 'strategic_value', 'Overhead insight', 'ref4', 2, 'overhead', NULL, NULL, '2026-07-15T10:00:00Z')
+             (1, 'exploration', 'Judgment insight', 'ref2', 4, 'judgment', NULL, NULL, '2026-07-15T10:00:00Z'),
+             (1, 'exploration', 'Judgment insight 2', 'ref3', 4, 'judgment', NULL, NULL, '2026-07-15T10:00:00Z'),
+             (1, 'architecture_decisions', 'Overhead insight', 'ref4', 2, 'overhead', NULL, NULL, '2026-07-15T10:00:00Z')
     `,
     ).run();
 

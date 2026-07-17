@@ -20,6 +20,7 @@ import {
   getSessions,
   getSessionRuns,
   getEffortByCategory,
+  getDerivedInsights,
 } from '../src/analytics/index.js';
 
 describe('dashboard server', () => {
@@ -52,10 +53,10 @@ describe('dashboard server', () => {
       `
       INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, effort_class, verified_by_git, recurrence_of, created_at)
       VALUES
-        (1, 'strategic_value', 'Insight A', 'ref-a', 0.9, 'judgment', NULL, NULL, '2026-07-14T10:00:00Z'),
-        (2, 'strategic_value', 'Insight B', 'ref-b', 0.8, 'toil', NULL, NULL, '2026-07-15T10:00:00Z'),
+        (1, 'architecture_decisions', 'Insight A', 'ref-a', 0.9, 'judgment', NULL, NULL, '2026-07-14T10:00:00Z'),
+        (2, 'architecture_decisions', 'Insight B', 'ref-b', 0.8, 'toil', NULL, NULL, '2026-07-15T10:00:00Z'),
         (2, 'friction_audit', 'Insight C', 'ref-c', 0.7, 'overhead', NULL, NULL, '2026-07-15T10:00:00Z'),
-        (3, 'strategic_value', 'Insight D', 'ref-d', 0.6, 'toil', NULL, NULL, '2026-07-15T10:00:00Z'),
+        (3, 'architecture_decisions', 'Insight D', 'ref-d', 0.6, 'toil', NULL, NULL, '2026-07-15T10:00:00Z'),
         (4, 'friction_audit', 'Insight E', 'ref-e', 0.95, 'judgment', NULL, NULL, '2026-07-16T10:00:00Z')
     `,
     ).run();
@@ -459,6 +460,70 @@ describe('dashboard server', () => {
       expect(statusRes.status).toBe(200);
       const job = await statusRes.json();
       expect(['queued', 'running', 'done', 'failed']).toContain(job.status);
+    });
+  });
+
+  describe('GET /api/derived-insights', () => {
+    it('returns 400 when project or session is missing', async () => {
+      const res = await fetch(`http://localhost:${port}/api/derived-insights?project=/project-a`);
+      expect(res.status).toBe(400);
+    });
+
+    it('returns derived insights matching getDerivedInsights (empty when none exist)', async () => {
+      const res = await fetch(
+        `http://localhost:${port}/api/derived-insights?project=/project-a&session=session-1`,
+      );
+      expect(res.status).toBe(200);
+      const apiData = await res.json();
+      const expected = getDerivedInsights(dbForAnalytics, '/project-a', 'session-1');
+      expect(apiData).toEqual(expected);
+    });
+  });
+
+  describe('POST /api/sessions/derive-insights + GET /api/sessions/derive-insights/:jobId', () => {
+    it('returns 400 when required fields are missing', async () => {
+      const res = await fetch(`http://localhost:${port}/api/sessions/derive-insights`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectDir: '/project-a' }),
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 404 for an unknown jobId', async () => {
+      const res = await fetch(
+        `http://localhost:${port}/api/sessions/derive-insights/unknown-job-id`,
+      );
+      expect(res.status).toBe(404);
+    });
+
+    it('starting a job with no work items completes as done with 0 derived insights', async () => {
+      const res = await fetch(`http://localhost:${port}/api/sessions/derive-insights`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectDir: '/project-a',
+          sessionId: 'session-1',
+          label: 'nonexistent-label',
+        }),
+      });
+      expect(res.status).toBe(200);
+      const { jobId } = await res.json();
+      expect(typeof jobId).toBe('string');
+
+      // No work items exist for this label, so deriveSessionInsights short-circuits
+      // without calling the API — poll until done rather than racing the async job.
+      let job;
+      for (let i = 0; i < 20; i++) {
+        const statusRes = await fetch(
+          `http://localhost:${port}/api/sessions/derive-insights/${jobId}`,
+        );
+        job = await statusRes.json();
+        if (job.status === 'done' || job.status === 'failed') break;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      expect(job.status).toBe('done');
+      expect(job.insightsDerived).toBe(0);
     });
   });
 });

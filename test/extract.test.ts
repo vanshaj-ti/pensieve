@@ -242,13 +242,13 @@ describe('Extract: Haiku Pass', () => {
           input: {
             candidates: [
               {
-                category: 'strategic_value',
+                category: 'architecture_decisions',
                 text: 'Important architecture decision',
                 evidenceRef: 'line:1',
                 evidenceSnippet: 'Test input',
               },
               {
-                category: 'decision_record',
+                category: 'exploration',
                 text: 'Database choice',
                 evidenceRef: 'line:1',
                 evidenceSnippet: 'Test input',
@@ -263,13 +263,13 @@ describe('Extract: Haiku Pass', () => {
 
     expect(result).toHaveLength(2);
     expect(result[0]).toEqual({
-      category: 'strategic_value',
+      category: 'architecture_decisions',
       text: 'Important architecture decision',
       evidenceRef: 'line:1',
       evidenceSnippet: 'Test input',
     });
     expect(result[1]).toEqual({
-      category: 'decision_record',
+      category: 'exploration',
       text: 'Database choice',
       evidenceRef: 'line:1',
       evidenceSnippet: 'Test input',
@@ -310,7 +310,7 @@ describe('Extract: Haiku Pass', () => {
           input: {
             candidates: [
               {
-                category: 'strategic_value',
+                category: 'architecture_decisions',
                 text: 'Missing evidenceSnippet field',
                 evidenceRef: 'line:1',
               },
@@ -351,7 +351,7 @@ describe('Extract: Haiku Pass', () => {
           type: 'tool_use',
           name: 'emit_candidates',
           input: {
-            candidates: { category: 'strategic_value', text: 'not an array' },
+            candidates: { category: 'architecture_decisions', text: 'not an array' },
           },
         },
       ],
@@ -389,7 +389,7 @@ describe('Extract: Sonnet Pass', () => {
       {
         episodeId: 1,
         candidate: {
-          category: 'strategic_value',
+          category: 'architecture_decisions',
           text: 'Candidate 1',
           evidenceRef: 'line:10',
           evidenceSnippet: 'snippet1',
@@ -398,7 +398,7 @@ describe('Extract: Sonnet Pass', () => {
       {
         episodeId: 2,
         candidate: {
-          category: 'decision_record',
+          category: 'exploration',
           text: 'Candidate 2',
           evidenceRef: 'line:20',
           evidenceSnippet: 'snippet2',
@@ -410,7 +410,7 @@ describe('Extract: Sonnet Pass', () => {
       {
         id: 100,
         episodeId: 99,
-        category: 'strategic_value' as const,
+        category: 'architecture_decisions' as const,
         text: 'Previous insight',
         evidenceRef: 'line:5',
         significanceScore: 4,
@@ -446,7 +446,7 @@ describe('Extract: Sonnet Pass', () => {
       {
         episodeId: 1,
         candidate: {
-          category: 'strategic_value',
+          category: 'architecture_decisions',
           text: 'New insight',
           evidenceRef: 'line:15',
           evidenceSnippet: 'test',
@@ -463,7 +463,7 @@ describe('Extract: Sonnet Pass', () => {
             insights: [
               {
                 episodeId: 1,
-                category: 'strategic_value',
+                category: 'architecture_decisions',
                 text: 'Polished insight',
                 evidenceRef: 'line:15',
                 significanceScore: 4,
@@ -472,7 +472,7 @@ describe('Extract: Sonnet Pass', () => {
               },
               {
                 episodeId: 1,
-                category: 'decision_record',
+                category: 'exploration',
                 text: 'New decision',
                 evidenceRef: 'line:16',
                 significanceScore: 3,
@@ -490,14 +490,14 @@ describe('Extract: Sonnet Pass', () => {
     expect(result).toHaveLength(2);
     expect(result[0]).toMatchObject({
       episodeId: 1,
-      category: 'strategic_value',
+      category: 'architecture_decisions',
       text: 'Polished insight',
       recurrenceOf: 100,
       verifiedByGit: null,
     });
     expect(result[1]).toMatchObject({
       episodeId: 1,
-      category: 'decision_record',
+      category: 'exploration',
       recurrenceOf: null,
     });
 
@@ -538,7 +538,7 @@ describe('Extract: Sonnet Pass', () => {
           type: 'tool_use',
           name: 'emit_insights',
           input: {
-            insights: { episodeId: 1, category: 'strategic_value', text: 'not an array' },
+            insights: { episodeId: 1, category: 'architecture_decisions', text: 'not an array' },
           },
         },
       ],
@@ -576,7 +576,7 @@ describe('Extract: Orchestration', () => {
 
     db.exec(`
       INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, effort_class, verified_by_git, recurrence_of, created_at)
-      VALUES (99, 'strategic_value', 'Old insight', 'line:5', 4.0, 'judgment', NULL, NULL, '2026-07-14T10:00:00Z')
+      VALUES (99, 'architecture_decisions', 'Old insight', 'line:5', 4.0, 'judgment', NULL, NULL, '2026-07-14T10:00:00Z')
     `);
 
     mockCreate = vi.fn();
@@ -730,7 +730,7 @@ describe('Extract: Orchestration', () => {
           input: {
             candidates: [
               {
-                category: 'ai_leverage',
+                category: 'mechanical_labor',
                 text: 'AI opportunity',
                 evidenceRef: 'line:1',
                 evidenceSnippet: 'test',
@@ -750,7 +750,7 @@ describe('Extract: Orchestration', () => {
             insights: [
               {
                 episodeId: 1,
-                category: 'ai_leverage',
+                category: 'mechanical_labor',
                 text: 'Verified AI opportunity',
                 evidenceRef: 'line:1',
                 significanceScore: 4,

@@ -21,3 +21,4 @@ export * from './crossProjectRollup.js';
 export * from './insightDates.js';
 export * from './labels.js';
 export * from './effortByCategory.js';
+export * from './derivedInsights.js';

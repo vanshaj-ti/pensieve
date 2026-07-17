@@ -46,7 +46,7 @@ describe('pipeline', () => {
     const insights: Insight[] = [
       {
         episodeId: 0, // Maps to the first (and only) episode in this day
-        category: 'strategic_value',
+        category: 'architecture_decisions',
         text: 'Test insight',
         evidenceRef: 'line 50',
         significanceScore: 0.8,
@@ -130,7 +130,7 @@ describe('pipeline', () => {
     const insights: Insight[] = [
       {
         episodeId: 0, // First episode
-        category: 'strategic_value',
+        category: 'architecture_decisions',
         text: 'Insight from episode 1',
         evidenceRef: 'line 1',
         significanceScore: 0.8,
@@ -140,7 +140,7 @@ describe('pipeline', () => {
       },
       {
         episodeId: 1, // Second episode
-        category: 'decision_record',
+        category: 'exploration',
         text: 'Insight from episode 2',
         evidenceRef: 'line 11',
         significanceScore: 0.7,
@@ -211,7 +211,7 @@ describe('pipeline', () => {
     vi.mocked(runExtraction).mockResolvedValueOnce([
       {
         episodeId: 0,
-        category: 'strategic_value',
+        category: 'architecture_decisions',
         text: 'Day 1 insight',
         evidenceRef: 'line 1',
         significanceScore: 0.8,
@@ -322,7 +322,7 @@ describe('pipeline', () => {
     const insights: Insight[] = [
       {
         episodeId: 0,
-        category: 'strategic_value',
+        category: 'architecture_decisions',
         text: 'Test insight',
         evidenceRef: 'line 50',
         significanceScore: 0.8,
@@ -364,7 +364,7 @@ describe('pipeline', () => {
       const insights: Insight[] = [
         {
           episodeId: 0,
-          category: 'strategic_value',
+          category: 'architecture_decisions',
           text: 'Test insight',
           evidenceRef: 'line 1',
           significanceScore: 0.8,
