@@ -16,6 +16,18 @@ export type PersistedEpisode = EpisodeDraft & { id: number };
 const HAIKU_CONCURRENCY = 5;
 
 /**
+ * Sonnet's verify/score output is capped at max_tokens=16384 per call
+ * (see sonnet.ts). On a large day, every episode's candidates used to go
+ * into ONE Sonnet call — a real production failure: a 27k-line day (many
+ * episodes worth of candidates) truncated the emit_insights tool response
+ * entirely, dropping the whole day to zero insights. Batching candidates
+ * into fixed-size chunks keeps each call's expected output comfortably
+ * under the token budget regardless of how large a day's session is.
+ */
+const SONNET_BATCH_SIZE = 40;
+const SONNET_CONCURRENCY = 3;
+
+/**
  * Runs `fn` over every item with at most `concurrency` calls in flight at
  * once, returning results in input order. No new dependency (no p-limit) —
  * a fixed-size pool of workers, each pulling the next unclaimed index until
@@ -91,7 +103,15 @@ export async function runExtraction(
   }
 
   const recentHistory = getRecentInsights(db, 7);
-  const insights = await verifyAndScore(allCandidatesWithSource, recentHistory, client);
 
-  return insights;
+  const batches: CandidateWithSource[][] = [];
+  for (let i = 0; i < allCandidatesWithSource.length; i += SONNET_BATCH_SIZE) {
+    batches.push(allCandidatesWithSource.slice(i, i + SONNET_BATCH_SIZE));
+  }
+
+  const batchResults = await mapWithConcurrency(batches, SONNET_CONCURRENCY, (batch) =>
+    verifyAndScore(batch, recentHistory, client),
+  );
+
+  return batchResults.flat();
 }
