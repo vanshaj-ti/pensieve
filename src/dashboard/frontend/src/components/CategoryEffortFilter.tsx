@@ -8,12 +8,13 @@ interface Props {
 }
 
 const CATEGORIES: InsightCategory[] = [
-  'strategic_value',
-  'decision_record',
+  'architecture_decisions',
+  'exploration',
+  'mechanical_labor',
+  'bug_fix',
+  'ai_correction_load',
   'friction_audit',
   'high_potential_seeds',
-  'ai_leverage',
-  'ai_correction_load',
 ];
 
 const EFFORTS: EffortClass[] = ['toil', 'judgment', 'overhead'];
