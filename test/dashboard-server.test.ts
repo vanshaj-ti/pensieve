@@ -371,6 +371,41 @@ describe('dashboard server', () => {
       );
       expect(res.status).toBe(400);
     });
+
+    it('returns 400 for invalid sortBy', async () => {
+      const res = await fetch(
+        `http://localhost:${port}/api/sessions/all?project=/project-a&sortBy=bogus`,
+      );
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 400 for invalid sortDir', async () => {
+      const res = await fetch(
+        `http://localhost:${port}/api/sessions/all?project=/project-a&sortDir=bogus`,
+      );
+      expect(res.status).toBe(400);
+    });
+
+    it('accepts sortBy=title, sortDir=asc, analyzed=false, and q without erroring', async () => {
+      const res = await fetch(
+        `http://localhost:${port}/api/sessions/all?project=/project-a&sortBy=title&sortDir=asc&analyzed=false&q=test`,
+      );
+      expect(res.status).toBe(200);
+      const apiData = await res.json();
+      expect(apiData.sessions).toEqual([]);
+      expect(apiData.total).toBe(0);
+    });
+
+    it('returns empty results for a project with no sessions on disk', async () => {
+      const res = await fetch(
+        `http://localhost:${port}/api/sessions/all?project=/definitely-not-a-real-project`,
+      );
+      expect(res.status).toBe(200);
+      const apiData = await res.json();
+      expect(apiData.sessions).toEqual([]);
+      expect(apiData.total).toBe(0);
+      expect(apiData.totalPages).toBe(1);
+    });
   });
 
   describe('GET /api/session-runs', () => {

@@ -88,9 +88,26 @@ export const fetchSessions = (project?: string) =>
 export const fetchSessionProjects = () =>
   fetchJson<SessionProject[]>('/api/session-projects', 'session projects');
 
-export const fetchSessionsAll = (projectDir: string, page = 1, pageSize = 20) =>
+export interface SessionListOptions {
+  page?: number;
+  pageSize?: number;
+  sortBy?: 'mtime' | 'title' | 'analyzed';
+  sortDir?: 'asc' | 'desc';
+  analyzed?: 'true' | 'false';
+  q?: string;
+}
+
+export const fetchSessionsAll = (projectDir: string, opts: SessionListOptions = {}) =>
   fetchJson<PaginatedSessions>(
-    `/api/sessions/all${buildQuery({ project: projectDir, page, pageSize })}`,
+    `/api/sessions/all${buildQuery({
+      project: projectDir,
+      page: opts.page ?? 1,
+      pageSize: opts.pageSize ?? 20,
+      sortBy: opts.sortBy,
+      sortDir: opts.sortDir,
+      analyzed: opts.analyzed,
+      q: opts.q,
+    })}`,
     'all sessions',
   );
 

@@ -307,11 +307,25 @@ export function createDashboardServer(config: Config): Application {
       }
       const pageSize = Math.min(rawPageSize, 100);
 
+      const sortBy = (req.query.sortBy as string) || 'mtime';
+      if (!['mtime', 'title', 'analyzed'].includes(sortBy)) {
+        return res.status(400).json({ error: 'Invalid sortBy: must be mtime, title, or analyzed' });
+      }
+      const sortDir = (req.query.sortDir as string) || 'desc';
+      if (!['asc', 'desc'].includes(sortDir)) {
+        return res.status(400).json({ error: 'Invalid sortDir: must be asc or desc' });
+      }
+      const analyzedFilter = req.query.analyzed as string | undefined; // 'true' | 'false' | undefined
+      const query = ((req.query.q as string) || '').trim().toLowerCase();
+
       // Filter/sort/paginate on cheap fields (dir name, stat mtime) first —
       // readSessionMetadata does a full-file read per session, which at
-      // real scale (thousands of sessions across projects/worktrees) is
-      // too slow to run on every session on every request. Only the final
-      // page's worth of sessions get their JSONL read for cwd/title.
+      // real scale (thousands of sessions in one project) is too slow to
+      // run on every session on every request. Only when a title-dependent
+      // operation is requested (sort by title, or a search query — which
+      // must match against title, not just the opaque session id) do we
+      // read metadata for every session in the project up front; otherwise
+      // only the final page's worth of sessions get their JSONL read.
       const analyzed = getSessions(db, projectDir);
       const analyzedMap = new Map(analyzed.map((s) => [`${s.projectDir}/${s.sessionId}`, s]));
 
@@ -335,16 +349,52 @@ export function createDashboardServer(config: Config): Application {
           };
         });
 
-      light.sort((a, b) => b.mtime.localeCompare(a.mtime));
+      const needsFullMetadataUpfront = sortBy === 'title' || query.length > 0;
 
-      const total = light.length;
+      let withMeta = light.map((s) => {
+        if (!needsFullMetadataUpfront) {
+          return { ...s, cwd: null as string | null, title: null as string | null };
+        }
+        const { cwd, title } = readSessionMetadata(s.filePath);
+        return { ...s, cwd, title };
+      });
+
+      if (analyzedFilter === 'true') {
+        withMeta = withMeta.filter((s) => s.analyzed);
+      } else if (analyzedFilter === 'false') {
+        withMeta = withMeta.filter((s) => !s.analyzed);
+      }
+
+      if (query) {
+        withMeta = withMeta.filter(
+          (s) =>
+            s.sessionId.toLowerCase().includes(query) ||
+            (s.title ?? '').toLowerCase().includes(query),
+        );
+      }
+
+      const dirMul = sortDir === 'asc' ? 1 : -1;
+      withMeta.sort((a, b) => {
+        if (sortBy === 'title') {
+          return dirMul * (a.title ?? '').localeCompare(b.title ?? '');
+        }
+        if (sortBy === 'analyzed') {
+          return dirMul * (Number(a.analyzed) - Number(b.analyzed));
+        }
+        return dirMul * a.mtime.localeCompare(b.mtime);
+      });
+
+      const total = withMeta.length;
       const totalPages = Math.max(1, Math.ceil(total / pageSize));
       const start = (page - 1) * pageSize;
-      const pageSlice = light.slice(start, start + pageSize);
+      const pageSlice = withMeta.slice(start, start + pageSize);
 
-      const sessions = pageSlice.map(({ filePath, ...rest }) => {
-        const { cwd, title } = readSessionMetadata(filePath);
-        return { ...rest, cwd, title };
+      const sessions = pageSlice.map(({ filePath, cwd, title, ...rest }) => {
+        if (needsFullMetadataUpfront) {
+          return { ...rest, cwd, title };
+        }
+        const meta = readSessionMetadata(filePath);
+        return { ...rest, cwd: meta.cwd, title: meta.title };
       });
 
       res.json({ sessions, page, pageSize, total, totalPages });

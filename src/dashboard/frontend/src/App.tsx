@@ -10,7 +10,8 @@ import type { AnalyticsFilter } from './types';
 function routeToFilter(route: Route): AnalyticsFilter {
   switch (route.kind) {
     case 'holistic':
-    case 'sessions':
+    case 'projects':
+    case 'projects-detail':
     case 'session-detail':
       return {};
     case 'project':
@@ -36,8 +37,10 @@ function routeScopeLabel(route: Route): string {
       return `${route.projectDir} · ${route.sessionId} · ${route.label}`;
     case 'label':
       return `Run: ${route.label}`;
-    case 'sessions':
-      return 'Sessions';
+    case 'projects':
+      return 'Projects';
+    case 'projects-detail':
+      return route.projectDir;
     case 'session-detail':
       return `${route.projectDir} · ${route.sessionId}`;
   }
@@ -152,21 +155,33 @@ export function App() {
         </button>
         <span className="crumb-sep">›</span>
         <button
-          className={route.kind === 'sessions' ? 'crumb active' : 'crumb'}
-          onClick={() => setRoute({ kind: 'sessions' })}
+          className={
+            route.kind === 'projects' || route.kind === 'projects-detail' ? 'crumb active' : 'crumb'
+          }
+          onClick={() => setRoute({ kind: 'projects' })}
         >
-          Sessions
+          Projects
         </button>
-        {route.kind !== 'holistic' && route.kind !== 'sessions' && (
+        {route.kind === 'projects-detail' && (
           <>
             <span className="crumb-sep">›</span>
-            <span className="crumb-current">{routeScopeLabel(route)}</span>
+            <span className="crumb-current">{route.projectDir}</span>
           </>
         )}
+        {route.kind !== 'holistic' &&
+          route.kind !== 'projects' &&
+          route.kind !== 'projects-detail' && (
+            <>
+              <span className="crumb-sep">›</span>
+              <span className="crumb-current">{routeScopeLabel(route)}</span>
+            </>
+          )}
       </nav>
 
-      {route.kind === 'sessions' ? (
+      {route.kind === 'projects' ? (
         <SessionsPage onNavigate={setRoute} />
+      ) : route.kind === 'projects-detail' ? (
+        <SessionsPage onNavigate={setRoute} initialProjectDir={route.projectDir} />
       ) : route.kind === 'session-detail' ? (
         <SessionDetailPage
           projectDir={route.projectDir}
