@@ -9,6 +9,7 @@ import { Config } from '../config.js';
 import { openDb } from '../db/schema.js';
 import { listSessionFiles, readSessionMetadata } from '../ingest/scanner.js';
 import { runDailyAnalysis } from '../pipeline.js';
+import { deriveSessionInsights } from '../synthesis.js';
 import {
   getCategoryTrend,
   getTopInsights,
@@ -23,12 +24,21 @@ import {
   getSessionRuns,
   updateLabelsForSession,
   getEffortByCategory,
+  getWorkItemsForRun,
+  insertDerivedInsights,
+  getDerivedInsights,
   type AnalyticsFilter,
 } from '../analytics/index.js';
 
 interface AnalyzeJob {
   status: 'queued' | 'running' | 'done' | 'failed';
   insightsPersisted?: number;
+  error?: string;
+}
+
+interface DeriveInsightsJob {
+  status: 'queued' | 'running' | 'done' | 'failed';
+  insightsDerived?: number;
   error?: string;
 }
 
@@ -87,6 +97,7 @@ export function createDashboardServer(config: Config): Application {
   const app = express();
   const db = openDb(config.dbPath);
   const analyzeJobs = new Map<string, AnalyzeJob>();
+  const deriveInsightsJobs = new Map<string, DeriveInsightsJob>();
 
   // Always resolves to the repo root's dist/dashboard/public, regardless of
   // whether this file is running from src/dashboard (dev/test via tsx/vitest)
@@ -463,6 +474,63 @@ export function createDashboardServer(config: Config): Application {
       return res.status(404).json({ error: 'Job not found' });
     }
     res.json(job);
+  });
+
+  app.post('/api/sessions/derive-insights', (req: Request, res: Response) => {
+    try {
+      const { projectDir, sessionId, label } = req.body as {
+        projectDir?: string;
+        sessionId?: string;
+        label?: string;
+      };
+      if (!projectDir || !sessionId || !label) {
+        return res
+          .status(400)
+          .json({ error: 'Body must include projectDir, sessionId, and label' });
+      }
+
+      const jobId = randomUUID();
+      deriveInsightsJobs.set(jobId, { status: 'running' });
+
+      const workItems = getWorkItemsForRun(db, projectDir, sessionId, label);
+      deriveSessionInsights({ projectDir, sessionId, label, workItems })
+        .then((derived) => {
+          insertDerivedInsights(db, derived);
+          deriveInsightsJobs.set(jobId, { status: 'done', insightsDerived: derived.length });
+        })
+        .catch((err) => {
+          deriveInsightsJobs.set(jobId, {
+            status: 'failed',
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
+
+      res.json({ jobId });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to start derive-insights job' });
+    }
+  });
+
+  app.get('/api/sessions/derive-insights/:jobId', (req: Request, res: Response) => {
+    const job = deriveInsightsJobs.get(req.params.jobId);
+    if (!job) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+    res.json(job);
+  });
+
+  app.get('/api/derived-insights', (req: Request, res: Response) => {
+    try {
+      const projectDir = req.query.project as string | undefined;
+      const sessionId = req.query.session as string | undefined;
+      const label = req.query.label as string | undefined;
+      if (!projectDir || !sessionId) {
+        return res.status(400).json({ error: 'project and session query params are required' });
+      }
+      res.json(getDerivedInsights(db, projectDir, sessionId, label));
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch derived insights' });
+    }
   });
 
   app.post('/api/labels', (req: Request, res: Response) => {

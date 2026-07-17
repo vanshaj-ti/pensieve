@@ -112,7 +112,7 @@ describe('initSchema', () => {
       INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `,
-    ).run(1, 'strategic_value', 'test', 'line 1', 0.8, null, null, '2024-01-01T00:00:00Z');
+    ).run(1, 'architecture_decisions', 'test', 'line 1', 0.8, null, null, '2024-01-01T00:00:00Z');
 
     const embedding = [0.1, 0.2, 0.3];
     const packed = packEmbedding(embedding);
