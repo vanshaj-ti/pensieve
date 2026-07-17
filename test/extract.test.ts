@@ -865,4 +865,94 @@ describe('Extract: Orchestration', () => {
     expect(result).toHaveLength(0);
     expect(mockCreate).toHaveBeenCalledOnce();
   });
+
+  it('Case 9: candidates beyond SONNET_BATCH_SIZE are split across multiple Sonnet calls', async () => {
+    // One episode producing 90 candidates from Haiku — well over the
+    // 40-candidate Sonnet batch size, so this must NOT be sent to Sonnet
+    // in a single call (the real production bug this guards against: a
+    // large day's candidates overflowing Sonnet's emit_insights max_tokens
+    // and truncating the whole day to zero insights).
+    const candidateCount = 90;
+    const episodes: PersistedEpisode[] = [
+      {
+        id: 1,
+        date: '2026-07-15',
+        projectDir: '/project',
+        sessionId: 'sess-1',
+        startLine: 1,
+        endLine: 1,
+        lines: [
+          {
+            lineNumber: 1,
+            type: 'user',
+            timestamp: '2026-07-15T10:00:00Z',
+            hasToolUse: false,
+            raw: {
+              type: 'user',
+              timestamp: '2026-07-15T10:00:00Z',
+              message: { content: 'test' },
+            },
+          },
+        ],
+      },
+    ];
+
+    mockCreate.mockImplementationOnce(async () => ({
+      content: [
+        {
+          type: 'tool_use',
+          name: 'emit_candidates',
+          input: {
+            candidates: Array.from({ length: candidateCount }, (_, i) => ({
+              category: 'mechanical_labor',
+              text: `Candidate ${i}`,
+              evidenceRef: `line:${i}`,
+              evidenceSnippet: 'test',
+            })),
+          },
+        },
+      ],
+    }));
+
+    let sonnetCallCount = 0;
+    const sonnetBatchSizes: number[] = [];
+    mockCreate.mockImplementation(async (args: { tools?: Array<{ name: string }> }) => {
+      if (args.tools?.[0]?.name === 'emit_candidates') {
+        // Only the first call (above, via mockImplementationOnce) should be Haiku.
+        throw new Error('Unexpected second Haiku call');
+      }
+      sonnetCallCount++;
+      // Echo back one insight per candidate actually sent in this call, by
+      // reading the candidatesList size embedded in the user message.
+      const userContent = (args as unknown as { messages: Array<{ content: string }> }).messages[0]
+        .content;
+      const matches = userContent.match(/\[Candidate \d+\]/g) ?? [];
+      sonnetBatchSizes.push(matches.length);
+      return {
+        content: [
+          {
+            type: 'tool_use',
+            name: 'emit_insights',
+            input: {
+              insights: matches.map((_, i) => ({
+                episodeId: 1,
+                category: 'mechanical_labor',
+                text: `Insight ${i}`,
+                evidenceRef: `line:${i}`,
+                significanceScore: 3,
+                effortClass: 'toil',
+                recurrenceOf: null,
+              })),
+            },
+          },
+        ],
+      };
+    });
+
+    const result = await runExtraction(episodes, db, client);
+
+    expect(sonnetCallCount).toBe(3); // ceil(90 / 40) = 3 batches
+    expect(sonnetBatchSizes).toEqual([40, 40, 10]);
+    expect(result).toHaveLength(candidateCount);
+  });
 });
