@@ -40,6 +40,23 @@ export function initSchema(db: Database.Database): void {
       model TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
+
+    -- Derived insights are NOT work items — they're higher-level
+    -- conclusions synthesized from a session's full set of work items
+    -- (the insights table above), generated on-demand per run (not
+    -- automatic per-day like the brief's narrative paragraph). Scoped by
+    -- project_dir + session_id + label, matching how episodes/insights
+    -- are already scoped to one specific analysis run.
+    CREATE TABLE IF NOT EXISTS derived_insights (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_dir TEXT NOT NULL,
+      session_id TEXT NOT NULL,
+      label TEXT NOT NULL,
+      insight_type TEXT NOT NULL,
+      text TEXT NOT NULL,
+      evidence_insight_ids TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
   `);
 
   // CREATE TABLE IF NOT EXISTS above is a no-op against a pre-existing

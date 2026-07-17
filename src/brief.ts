@@ -29,21 +29,23 @@ export interface BriefOptions {
 }
 
 const CATEGORY_ORDER: InsightCategory[] = [
-  'strategic_value',
-  'decision_record',
+  'architecture_decisions',
+  'exploration',
+  'bug_fix',
   'friction_audit',
-  'high_potential_seeds',
-  'ai_leverage',
   'ai_correction_load',
+  'high_potential_seeds',
+  'mechanical_labor',
 ];
 
 const CATEGORY_HEADERS: Record<InsightCategory, string> = {
-  strategic_value: 'Strategic Value',
-  decision_record: 'Decision Record',
+  architecture_decisions: 'Architecture Decisions',
+  exploration: 'Exploration',
+  bug_fix: 'Bug Fix',
   friction_audit: 'Friction Audit',
-  high_potential_seeds: 'High-Potential Seeds',
-  ai_leverage: 'AI Leverage',
   ai_correction_load: 'AI Correction Load',
+  high_potential_seeds: 'High-Potential Seeds',
+  mechanical_labor: 'Mechanical Labor',
 };
 
 interface InsightWithRecurrenceDate extends Insight {

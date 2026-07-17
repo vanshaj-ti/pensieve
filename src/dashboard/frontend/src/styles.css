@@ -358,6 +358,28 @@ ul.insight-list.scrollable {
   border: 1px solid var(--border);
 }
 
+.badge-derived.struggle {
+  background: color-mix(in srgb, var(--toil) 16%, transparent);
+  color: var(--toil);
+}
+.badge-derived.risk {
+  background: color-mix(in srgb, var(--overhead) 16%, transparent);
+  color: var(--overhead);
+}
+.badge-derived.win {
+  background: color-mix(in srgb, var(--judgment) 16%, transparent);
+  color: var(--judgment);
+}
+.badge-derived.learning {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.badge-derived.idea {
+  background: var(--surface-alt);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
 .insight-meta {
   font-size: 0.72rem;
   color: var(--text-faint);

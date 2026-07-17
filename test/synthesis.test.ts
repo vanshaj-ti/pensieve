@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import type Anthropic from '@anthropic-ai/sdk';
-import { synthesizeBriefNarrative } from '../src/synthesis.js';
+import { synthesizeBriefNarrative, deriveSessionInsights } from '../src/synthesis.js';
 import type { Insight } from '../src/types.js';
 import type { EffortBreakdown } from '../src/analytics/index.js';
 
@@ -131,5 +131,117 @@ describe('synthesizeBriefNarrative', () => {
     );
 
     expect(result).toBeNull();
+  });
+});
+
+describe('deriveSessionInsights', () => {
+  it('returns [] immediately when there are no work items, without calling the client', async () => {
+    const create = vi.fn();
+    const client = makeClient(create);
+
+    const result = await deriveSessionInsights(
+      { projectDir: '/proj', sessionId: 'sess', label: 'run-a', workItems: [] },
+      client,
+    );
+
+    expect(result).toEqual([]);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('parses derived insights from the emit_derived_insights tool_use block', async () => {
+    const client = makeClient(async () => ({
+      content: [
+        {
+          type: 'tool_use',
+          name: 'emit_derived_insights',
+          input: {
+            insights: [
+              {
+                insightType: 'struggle',
+                text: 'Recurring friction around token limits',
+                evidenceInsightIds: [1, 2],
+              },
+              {
+                insightType: 'idea',
+                text: 'Worth exploring sqlite-vec',
+                evidenceInsightIds: [3],
+              },
+            ],
+          },
+        },
+      ],
+    }));
+
+    const result = await deriveSessionInsights(
+      {
+        projectDir: '/proj',
+        sessionId: 'sess',
+        label: 'run-a',
+        workItems: [makeInsight({ id: 1 }), makeInsight({ id: 2 }), makeInsight({ id: 3 })],
+      },
+      client,
+    );
+
+    expect(result).toHaveLength(2);
+    expect(result[0]).toMatchObject({
+      projectDir: '/proj',
+      sessionId: 'sess',
+      label: 'run-a',
+      insightType: 'struggle',
+      text: 'Recurring friction around token limits',
+      evidenceInsightIds: [1, 2],
+    });
+    expect(result[1].insightType).toBe('idea');
+  });
+
+  it('includes work item text and ids in the request body', async () => {
+    let capturedArgs: unknown;
+    const client = makeClient(async (...args: unknown[]) => {
+      capturedArgs = args[0];
+      return {
+        content: [{ type: 'tool_use', name: 'emit_derived_insights', input: { insights: [] } }],
+      };
+    });
+
+    await deriveSessionInsights(
+      {
+        projectDir: '/proj',
+        sessionId: 'sess',
+        label: 'run-a',
+        workItems: [makeInsight({ id: 42, text: 'A very specific work item' })],
+      },
+      client,
+    );
+
+    const body = capturedArgs as { messages: Array<{ content: string }>; temperature?: number };
+    expect(body.messages[0].content).toContain('A very specific work item');
+    expect(body.messages[0].content).toContain('id=42');
+    expect(body.temperature).toBeUndefined();
+  });
+
+  it('returns [] (no throw) when there is no tool_use block', async () => {
+    const client = makeClient(async () => ({
+      content: [{ type: 'text', text: 'not a tool call' }],
+    }));
+
+    const result = await deriveSessionInsights(
+      { projectDir: '/proj', sessionId: 'sess', label: 'run-a', workItems: [makeInsight()] },
+      client,
+    );
+
+    expect(result).toEqual([]);
+  });
+
+  it('returns [] (no throw) when the API call rejects', async () => {
+    const client = makeClient(async () => {
+      throw new Error('network error');
+    });
+
+    const result = await deriveSessionInsights(
+      { projectDir: '/proj', sessionId: 'sess', label: 'run-a', workItems: [makeInsight()] },
+      client,
+    );
+
+    expect(result).toEqual([]);
   });
 });

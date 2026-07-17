@@ -26,7 +26,7 @@ function recentIso(daysAgo: number): string {
 function makeInsight(overrides: Partial<Insight> = {}): Insight {
   return {
     episodeId: 1,
-    category: 'strategic_value',
+    category: 'architecture_decisions',
     text: 'test insight',
     evidenceRef: 'line 1',
     significanceScore: 3,
@@ -97,7 +97,7 @@ describe('applyEmbeddingRecurrence', () => {
     const insights: Insight[] = [
       {
         episodeId: 1,
-        category: 'strategic_value',
+        category: 'architecture_decisions',
         text: 'test insight',
         evidenceRef: 'line 5',
         significanceScore: 0.8,
@@ -137,7 +137,16 @@ describe('applyEmbeddingRecurrence', () => {
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `,
       )
-      .run(1, 'strategic_value', 'old insight', 'line 1', 0.8, null, null, '2024-01-01T00:00:00Z');
+      .run(
+        1,
+        'architecture_decisions',
+        'old insight',
+        'line 1',
+        0.8,
+        null,
+        null,
+        '2024-01-01T00:00:00Z',
+      );
 
     const oldId = oldInsight.lastInsertRowid as number;
 
@@ -156,7 +165,7 @@ describe('applyEmbeddingRecurrence', () => {
     const insightsWithDisabledEmbeddings: Insight[] = [
       {
         episodeId: 1,
-        category: 'strategic_value',
+        category: 'architecture_decisions',
         text: 'new insight',
         evidenceRef: 'line 2',
         significanceScore: 0.8,
@@ -180,7 +189,7 @@ describe('applyEmbeddingRecurrence', () => {
     const insights: Insight[] = [
       {
         episodeId: 1,
-        category: 'strategic_value',
+        category: 'architecture_decisions',
         text: 'test',
         evidenceRef: 'line 1',
         significanceScore: 0.8,
@@ -279,7 +288,7 @@ describe('applyEmbeddingRecurrence', () => {
 
     const newInsight: Insight = {
       episodeId: 1,
-      category: 'strategic_value',
+      category: 'architecture_decisions',
       text: 'genuinely different insight',
       evidenceRef: 'line 9',
       significanceScore: 3,

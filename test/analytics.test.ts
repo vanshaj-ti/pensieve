@@ -15,6 +15,9 @@ import {
   getSessionRuns,
   updateLabelsForSession,
   getEffortByCategory,
+  getWorkItemsForRun,
+  insertDerivedInsights,
+  getDerivedInsights,
 } from '../src/analytics/index.js';
 
 describe('analytics', () => {
@@ -51,20 +54,28 @@ describe('analytics', () => {
       db.prepare(
         `
         INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
-        VALUES (1, 'strategic_value', 'Insight 1', 'ref1', 0.8, NULL, NULL, '2026-07-15T10:00:00Z'),
-               (1, 'strategic_value', 'Insight 2', 'ref2', 0.7, NULL, NULL, '2026-07-15T10:00:00Z'),
+        VALUES (1, 'architecture_decisions', 'Insight 1', 'ref1', 0.8, NULL, NULL, '2026-07-15T10:00:00Z'),
+               (1, 'architecture_decisions', 'Insight 2', 'ref2', 0.7, NULL, NULL, '2026-07-15T10:00:00Z'),
                (1, 'friction_audit', 'Insight 3', 'ref3', 0.6, NULL, NULL, '2026-07-15T10:00:00Z'),
-               (2, 'strategic_value', 'Insight 4', 'ref4', 0.9, NULL, NULL, '2026-07-16T10:00:00Z')
+               (2, 'architecture_decisions', 'Insight 4', 'ref4', 0.9, NULL, NULL, '2026-07-16T10:00:00Z')
       `,
       ).run();
 
       const result = getCategoryTrend(db, 30);
 
-      // Expect 3 rows: 2026-07-15 strategic_value (2), 2026-07-15 friction_audit (1), 2026-07-16 strategic_value (1)
+      // Expect 3 rows: 2026-07-15 architecture_decisions (2), 2026-07-15 friction_audit (1), 2026-07-16 architecture_decisions (1)
       expect(result).toHaveLength(3);
-      expect(result[0]).toEqual({ date: '2026-07-15', category: 'friction_audit', count: 1 });
-      expect(result[1]).toEqual({ date: '2026-07-15', category: 'strategic_value', count: 2 });
-      expect(result[2]).toEqual({ date: '2026-07-16', category: 'strategic_value', count: 1 });
+      expect(result[0]).toEqual({
+        date: '2026-07-15',
+        category: 'architecture_decisions',
+        count: 2,
+      });
+      expect(result[1]).toEqual({ date: '2026-07-15', category: 'friction_audit', count: 1 });
+      expect(result[2]).toEqual({
+        date: '2026-07-16',
+        category: 'architecture_decisions',
+        count: 1,
+      });
     });
   });
 
@@ -85,9 +96,9 @@ describe('analytics', () => {
       db.prepare(
         `
         INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
-        VALUES (1, 'strategic_value', 'Low score', 'ref1', 0.3, NULL, NULL, '2026-07-15T10:00:00Z'),
+        VALUES (1, 'architecture_decisions', 'Low score', 'ref1', 0.3, NULL, NULL, '2026-07-15T10:00:00Z'),
                (1, 'friction_audit', 'High score', 'ref2', 0.9, NULL, NULL, '2026-07-15T10:00:00Z'),
-               (1, 'decision_record', 'Mid score', 'ref3', 0.6, NULL, NULL, '2026-07-15T10:00:00Z')
+               (1, 'exploration', 'Mid score', 'ref3', 0.6, NULL, NULL, '2026-07-15T10:00:00Z')
       `,
       ).run();
 
@@ -112,7 +123,7 @@ describe('analytics', () => {
         db.prepare(
           `
           INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
-          VALUES (1, 'strategic_value', ?, ?, ?, NULL, NULL, '2026-07-15T10:00:00Z')
+          VALUES (1, 'architecture_decisions', ?, ?, ?, NULL, NULL, '2026-07-15T10:00:00Z')
         `,
         ).run(`Insight ${i}`, `ref${i}`, 0.5 + i * 0.01);
       }
@@ -132,7 +143,7 @@ describe('analytics', () => {
       db.prepare(
         `
         INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
-        VALUES (1, 'strategic_value', 'Test insight', 'ref', 0.8, NULL, NULL, '2026-07-15T10:00:00Z')
+        VALUES (1, 'architecture_decisions', 'Test insight', 'ref', 0.8, NULL, NULL, '2026-07-15T10:00:00Z')
       `,
       ).run();
 
@@ -155,7 +166,7 @@ describe('analytics', () => {
       db.prepare(
         `
         INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
-        VALUES (1, 'strategic_value', 'Test', 'ref', 0.8, NULL, NULL, '2026-07-15T10:00:00Z')
+        VALUES (1, 'architecture_decisions', 'Test', 'ref', 0.8, NULL, NULL, '2026-07-15T10:00:00Z')
       `,
       ).run();
 
@@ -246,7 +257,7 @@ describe('analytics', () => {
       db.prepare(
         `
         INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
-        VALUES (1, 'decision_record', 'Chain2 root', 'ref', 0.8, NULL, NULL, '2026-07-14T10:00:00Z')
+        VALUES (1, 'exploration', 'Chain2 root', 'ref', 0.8, NULL, NULL, '2026-07-14T10:00:00Z')
       `,
       ).run();
 
@@ -255,7 +266,7 @@ describe('analytics', () => {
       db.prepare(
         `
         INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
-        VALUES (2, 'decision_record', 'Chain2 child1', 'ref', 0.7, NULL, ?, '2026-07-15T10:00:00Z')
+        VALUES (2, 'exploration', 'Chain2 child1', 'ref', 0.7, NULL, ?, '2026-07-15T10:00:00Z')
       `,
       ).run(chain2Root.id);
 
@@ -264,7 +275,7 @@ describe('analytics', () => {
       db.prepare(
         `
         INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
-        VALUES (3, 'decision_record', 'Chain2 child2', 'ref', 0.6, NULL, ?, '2026-07-16T10:00:00Z')
+        VALUES (3, 'exploration', 'Chain2 child2', 'ref', 0.6, NULL, ?, '2026-07-16T10:00:00Z')
       `,
       ).run(chain2Child.id);
 
@@ -494,7 +505,7 @@ describe('analytics', () => {
       db.prepare(
         `
         INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
-        VALUES (1, 'strategic_value', 'Test', 'ref', 0.8, NULL, NULL, '2026-07-15T10:00:00Z')
+        VALUES (1, 'architecture_decisions', 'Test', 'ref', 0.8, NULL, NULL, '2026-07-15T10:00:00Z')
       `,
       ).run();
 
@@ -517,11 +528,11 @@ describe('analytics', () => {
       db.prepare(
         `
         INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
-        VALUES (1, 'strategic_value', 'Insight 1', 'ref', 0.8, NULL, NULL, '2026-07-15T10:00:00Z'),
-               (2, 'strategic_value', 'Insight 2', 'ref', 0.8, NULL, NULL, '2026-07-15T10:00:00Z'),
+        VALUES (1, 'architecture_decisions', 'Insight 1', 'ref', 0.8, NULL, NULL, '2026-07-15T10:00:00Z'),
+               (2, 'architecture_decisions', 'Insight 2', 'ref', 0.8, NULL, NULL, '2026-07-15T10:00:00Z'),
                (2, 'friction_audit', 'Insight 3', 'ref', 0.7, NULL, NULL, '2026-07-15T10:00:00Z'),
-               (2, 'decision_record', 'Insight 4', 'ref', 0.7, NULL, NULL, '2026-07-15T10:00:00Z'),
-               (3, 'strategic_value', 'Insight 5', 'ref', 0.8, NULL, NULL, '2026-07-15T10:00:00Z')
+               (2, 'exploration', 'Insight 4', 'ref', 0.7, NULL, NULL, '2026-07-15T10:00:00Z'),
+               (3, 'architecture_decisions', 'Insight 5', 'ref', 0.8, NULL, NULL, '2026-07-15T10:00:00Z')
       `,
       ).run();
 
@@ -563,8 +574,8 @@ describe('analytics', () => {
         INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, effort_class, verified_by_git, recurrence_of, created_at)
         VALUES (1, 'friction_audit', 'Toil A', 'ref1', 3, 'toil', NULL, NULL, '2026-07-15T10:00:00Z'),
                (1, 'friction_audit', 'Toil B', 'ref2', 3, 'toil', NULL, NULL, '2026-07-15T10:00:00Z'),
-               (1, 'decision_record', 'Judgment A', 'ref3', 4, 'judgment', NULL, NULL, '2026-07-15T10:00:00Z'),
-               (1, 'strategic_value', 'Overhead A', 'ref4', 2, 'overhead', NULL, NULL, '2026-07-15T10:00:00Z')
+               (1, 'exploration', 'Judgment A', 'ref3', 4, 'judgment', NULL, NULL, '2026-07-15T10:00:00Z'),
+               (1, 'architecture_decisions', 'Overhead A', 'ref4', 2, 'overhead', NULL, NULL, '2026-07-15T10:00:00Z')
       `,
       ).run();
 
@@ -614,7 +625,7 @@ describe('analytics', () => {
       db.prepare(
         `
         INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
-        VALUES (1, 'strategic_value', 'Pre-existing insight', 'ref1', 3, NULL, NULL, '2026-07-15T10:00:00Z')
+        VALUES (1, 'architecture_decisions', 'Pre-existing insight', 'ref1', 3, NULL, NULL, '2026-07-15T10:00:00Z')
       `,
       ).run();
 
@@ -640,7 +651,7 @@ describe('analytics', () => {
         `
         INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, effort_class, verified_by_git, recurrence_of, created_at)
         VALUES
-          (1, 'strategic_value', 'From run-a', 'ref-a', 0.9, 'judgment', NULL, NULL, '2026-07-15T10:00:00Z'),
+          (1, 'architecture_decisions', 'From run-a', 'ref-a', 0.9, 'judgment', NULL, NULL, '2026-07-15T10:00:00Z'),
           (2, 'friction_audit', 'From run-b', 'ref-b', 0.5, 'toil', NULL, NULL, '2026-07-15T10:00:00Z')
       `,
       ).run();
@@ -648,7 +659,9 @@ describe('analytics', () => {
 
     it('getCategoryTrend scopes to a label', () => {
       const result = getCategoryTrend(db, 30, { label: 'run-a' });
-      expect(result).toEqual([{ date: '2026-07-15', category: 'strategic_value', count: 1 }]);
+      expect(result).toEqual([
+        { date: '2026-07-15', category: 'architecture_decisions', count: 1 },
+      ]);
     });
 
     it('getTopInsights scopes to a project', () => {
@@ -689,9 +702,9 @@ describe('analytics', () => {
         `
         INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, effort_class, verified_by_git, recurrence_of, created_at)
         VALUES
-          (1, 'strategic_value', 'Insight 1', 'ref1', 0.9, 'judgment', NULL, NULL, '2026-07-15T10:00:00Z'),
+          (1, 'architecture_decisions', 'Insight 1', 'ref1', 0.9, 'judgment', NULL, NULL, '2026-07-15T10:00:00Z'),
           (2, 'friction_audit', 'Insight 2', 'ref2', 0.8, 'toil', NULL, NULL, '2026-07-15T10:00:00Z'),
-          (3, 'ai_leverage', 'Insight 3', 'ref3', 0.7, 'judgment', NULL, NULL, '2026-07-15T10:00:00Z')
+          (3, 'mechanical_labor', 'Insight 3', 'ref3', 0.7, 'judgment', NULL, NULL, '2026-07-15T10:00:00Z')
       `,
       ).run();
     });
@@ -766,14 +779,14 @@ describe('analytics', () => {
           (1, 'friction_audit', 'Toil 1', 'ref1', 3, 'toil', NULL, NULL, '2026-07-15T10:00:00Z'),
           (1, 'friction_audit', 'Toil 2', 'ref2', 3, 'toil', NULL, NULL, '2026-07-15T10:00:00Z'),
           (1, 'friction_audit', 'Judgment 1', 'ref3', 4, 'judgment', NULL, NULL, '2026-07-15T10:00:00Z'),
-          (1, 'decision_record', 'Overhead 1', 'ref4', 2, 'overhead', NULL, NULL, '2026-07-15T10:00:00Z')
+          (1, 'exploration', 'Overhead 1', 'ref4', 2, 'overhead', NULL, NULL, '2026-07-15T10:00:00Z')
       `,
       ).run();
 
       const result = getEffortByCategory(db, '2026-07-15');
       expect(result).toEqual([
         { category: 'friction_audit', toil: 2, judgment: 1, overhead: 0, total: 3 },
-        { category: 'decision_record', toil: 0, judgment: 0, overhead: 1, total: 1 },
+        { category: 'exploration', toil: 0, judgment: 0, overhead: 1, total: 1 },
       ]);
     });
 
@@ -824,10 +837,10 @@ describe('analytics', () => {
         `
         INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, effort_class, verified_by_git, recurrence_of, created_at)
         VALUES
-          (1, 'strategic_value', 'Old run insight 1', 'ref1', 3, 'judgment', NULL, NULL, '2026-07-15T10:00:00Z'),
-          (1, 'strategic_value', 'Old run insight 2', 'ref2', 3, 'judgment', NULL, NULL, '2026-07-15T11:00:00Z'),
-          (2, 'strategic_value', 'New run insight', 'ref3', 3, 'judgment', NULL, NULL, '2026-07-16T10:00:00Z'),
-          (3, 'strategic_value', 'Other session insight', 'ref4', 3, 'judgment', NULL, NULL, '2026-07-15T10:00:00Z')
+          (1, 'architecture_decisions', 'Old run insight 1', 'ref1', 3, 'judgment', NULL, NULL, '2026-07-15T10:00:00Z'),
+          (1, 'architecture_decisions', 'Old run insight 2', 'ref2', 3, 'judgment', NULL, NULL, '2026-07-15T11:00:00Z'),
+          (2, 'architecture_decisions', 'New run insight', 'ref3', 3, 'judgment', NULL, NULL, '2026-07-16T10:00:00Z'),
+          (3, 'architecture_decisions', 'Other session insight', 'ref4', 3, 'judgment', NULL, NULL, '2026-07-15T10:00:00Z')
       `,
       ).run();
 
@@ -836,6 +849,94 @@ describe('analytics', () => {
         { label: 'run-new', insightCount: 1, latestAt: '2026-07-16T10:00:00Z' },
         { label: 'run-old', insightCount: 2, latestAt: '2026-07-15T11:00:00Z' },
       ]);
+    });
+  });
+
+  describe('getWorkItemsForRun / insertDerivedInsights / getDerivedInsights', () => {
+    beforeEach(() => {
+      db.prepare(
+        `
+        INSERT INTO episodes (date, project_dir, session_id, start_line, end_line, label)
+        VALUES
+          ('2026-07-15', '/tmp/project', 'session-1', 1, 10, 'run-a'),
+          ('2026-07-15', '/tmp/project', 'session-1', 11, 20, 'run-b')
+      `,
+      ).run();
+
+      db.prepare(
+        `
+        INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, effort_class, verified_by_git, recurrence_of, created_at)
+        VALUES
+          (1, 'friction_audit', 'Item 1', 'ref1', 4, 'toil', NULL, NULL, '2026-07-15T10:00:00Z'),
+          (1, 'bug_fix', 'Item 2', 'ref2', 5, 'judgment', NULL, NULL, '2026-07-15T10:05:00Z'),
+          (2, 'exploration', 'Other run item', 'ref3', 3, 'judgment', NULL, NULL, '2026-07-15T10:00:00Z')
+      `,
+      ).run();
+    });
+
+    it('getWorkItemsForRun returns only that runs work items, oldest first', () => {
+      const result = getWorkItemsForRun(db, '/tmp/project', 'session-1', 'run-a');
+      expect(result).toHaveLength(2);
+      expect(result[0].text).toBe('Item 1');
+      expect(result[1].text).toBe('Item 2');
+    });
+
+    it('insertDerivedInsights + getDerivedInsights round-trip', () => {
+      const now = '2026-07-15T12:00:00Z';
+      insertDerivedInsights(db, [
+        {
+          projectDir: '/tmp/project',
+          sessionId: 'session-1',
+          label: 'run-a',
+          insightType: 'struggle',
+          text: 'Recurring friction around token limits',
+          evidenceInsightIds: [1, 2],
+          createdAt: now,
+        },
+      ]);
+
+      const result = getDerivedInsights(db, '/tmp/project', 'session-1', 'run-a');
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        projectDir: '/tmp/project',
+        sessionId: 'session-1',
+        label: 'run-a',
+        insightType: 'struggle',
+        text: 'Recurring friction around token limits',
+        evidenceInsightIds: [1, 2],
+        createdAt: now,
+      });
+    });
+
+    it('getDerivedInsights without a label returns all labels for that session', () => {
+      insertDerivedInsights(db, [
+        {
+          projectDir: '/tmp/project',
+          sessionId: 'session-1',
+          label: 'run-a',
+          insightType: 'win',
+          text: 'Insight A',
+          evidenceInsightIds: [1],
+          createdAt: '2026-07-15T12:00:00Z',
+        },
+        {
+          projectDir: '/tmp/project',
+          sessionId: 'session-1',
+          label: 'run-b',
+          insightType: 'idea',
+          text: 'Insight B',
+          evidenceInsightIds: [3],
+          createdAt: '2026-07-15T13:00:00Z',
+        },
+      ]);
+
+      const result = getDerivedInsights(db, '/tmp/project', 'session-1');
+      expect(result).toHaveLength(2);
+    });
+
+    it('getDerivedInsights returns empty array when none exist', () => {
+      const result = getDerivedInsights(db, '/tmp/project', 'session-1', 'run-a');
+      expect(result).toEqual([]);
     });
   });
 });

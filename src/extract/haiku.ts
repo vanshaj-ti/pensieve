@@ -18,23 +18,22 @@ export class HaikuExtractionError extends Error {
   }
 }
 
-const SYSTEM_PROMPT = `You are an insight extraction system. Your task is to identify actionable insights from development session transcripts.
+const SYSTEM_PROMPT = `You are a work-item extraction system. Your task is to tag every distinct unit of work in a development session transcript into one of seven categories. A work item is NOT necessarily a "learning" or "insight" — it's a raw tagged record of something that happened. A separate downstream synthesis pass decides what's actually worth surfacing as an insight; your job is complete, high-recall tagging.
 
-Extract insights that fall into one of these categories:
-- strategic_value: Insights that change how you'd build or prioritize something long-term — NOT "task X completed", even if X sounds architectural.
-- decision_record: An explicit choice was made, with a stated reason ("we chose X over Y because Z") or a clear alternative considered. Not just an action taken — the reasoning behind it.
-- friction_audit: A blocker, error, retry, or something that wasted time or caused frustration. Evidence should be something that broke or slowed work down.
-- high_potential_seeds: A future-tense or speculative idea the user expressed but has not yet acted on — "what if we...", "we could later...". Not something already built.
-- ai_leverage: The AI did something non-trivially useful that saved significant time or effort — not just "AI was used," but a concrete instance of leverage.
-- ai_correction_load: The user corrected AI output, re-ran something because the AI got it wrong, or caught an AI mistake. Must be AI-specific, not general human error.
+Extract work items into one of these seven categories:
+- architecture_decisions: An architecture/product choice was made, with a stated reason ("we chose X over Y because Z") or a clear alternative considered. Example: "Chose Claude Haiku for episode extraction and Claude Sonnet for verification over a local-only LLM approach, since local 8B models still lag Haiku-tier on nuanced categorization and API cost is negligible at daily scale."
+- exploration: Research or investigation of an approach — whether or not it led to a decision or concrete outcome. Example: "Explored whether Vite+React vs staying vanilla was worth it for the dashboard, read existing patterns, weighed the tradeoff."
+- mechanical_labor: Implementation, testing, or routine/known execution — no new judgment required. Includes AI doing solid implementation work (not a separate category) AND pure status/progress narration ("tests passing", "build clean", "PR merged", "ran the build"). Example: "Ran the build command, restarted the dashboard server, and re-verified the same drill-down flow in the browser after each of three consecutive small CSS fixes."
+- bug_fix: A root cause was diagnosed AND a resolution was applied. This is the fix itself — not the symptom (see friction_audit). Example: "First dedup clustering implementation had a real bug: reassigning the survivor index mid-cluster left the new survivor unmarked, causing double-counting. Rewrote as single-pass visited-set clustering to fix it."
+- ai_correction_load: The user corrected AI output, re-ran something because the AI got it wrong, or caught an AI mistake. Must be AI-specific, not general human error. Example: "First dedup clustering implementation had a bug the user caught and had rewritten as single-pass visited-set clustering."
+- friction_audit: A blocker, error, or time-wasting obstacle that is NOT a code bug — slow CI, a confusing tool error, an unclear API, a process breakdown. The symptom/incident itself, not its resolution. Example: "Episode chunking allowed single episodes to exceed Haiku's 200k token context limit (observed 253,935 tokens) with no retry or truncation fallback, causing silent data loss."
+- high_potential_seeds: A future-tense or speculative idea the user expressed but has not yet acted on — "what if we...", "we could later...". Not something already built. Example: "A weekly/monthly friction rollup ('this issue recurred 12 times this month') would be a much stronger signal than the current 30-day recurrence-chain view, which has no long-horizon aggregation yet."
 
-Exclude entirely, in every category: pure status/progress narration — "run completed successfully", "N tests passing", "PR merged", "build clean". These describe that something happened, not what should be learned or acted on from it. Do not emit a candidate for these even at low confidence; they are not borderline, they are out of scope.
+Be high-recall: over-include candidates rather than being conservative, including routine/mechanical work — tag it mechanical_labor rather than omitting it. False positives are filtered in downstream verification; false negatives are permanent misses. There is no "exclude entirely" category anymore — every distinct unit of work gets tagged into one of the seven categories above, even if it's routine status narration (tag as mechanical_labor).
 
-Be high-recall on genuine insights: over-include candidates rather than being conservative. False positives are filtered in downstream verification; false negatives are permanent misses. This does not extend to status narration, which should never be emitted regardless of recall settings.
-
-For each insight, provide:
-- category: One of the six categories above
-- text: The insight text (will be polished downstream)
+For each work item, provide:
+- category: One of the seven categories above
+- text: The work item text (will be polished downstream)
 - evidenceRef: Format "line:<lineNumber>" pointing to supporting evidence
 - evidenceSnippet: Exact quoted substring from the episode supporting the claim`;
 
@@ -154,12 +153,13 @@ export async function generateCandidates(
                     category: {
                       type: 'string',
                       enum: [
-                        'strategic_value',
-                        'decision_record',
+                        'architecture_decisions',
+                        'exploration',
+                        'mechanical_labor',
+                        'bug_fix',
+                        'ai_correction_load',
                         'friction_audit',
                         'high_potential_seeds',
-                        'ai_leverage',
-                        'ai_correction_load',
                       ],
                     },
                     text: { type: 'string' },

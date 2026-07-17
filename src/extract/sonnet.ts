@@ -29,11 +29,11 @@ export function getRecentInsights(db: Database.Database, days = 7): Insight[] {
   });
 }
 
-const SONNET_SYSTEM_PROMPT = `You are a verification and scoring system for development insights.
+const SONNET_SYSTEM_PROMPT = `You are a verification and scoring system for development-session work items.
 
 You receive:
-1. Candidate insights extracted from today's sessions (indexed with episodeId, category, text, evidenceRef, evidenceSnippet)
-2. Recent history of previously stored insights (from the last 5-7 days)
+1. Candidate work items extracted from today's sessions (indexed with episodeId, category, text, evidenceRef, evidenceSnippet)
+2. Recent history of previously stored work items (from the last 5-7 days)
 
 Note: exact-duplicate collapsing and cross-day recurrence linking already
 happen downstream via embedding similarity — you do not need to solve those
@@ -41,34 +41,33 @@ yourself. Your job is the judgment calls embeddings can't make: rejecting
 hallucinated/unsupported candidates, merging candidates that describe the
 same underlying fact in different words (embeddings catch near-identical
 text; you catch same-meaning-different-phrasing), and scoring significance
-with real discrimination between levels.
+with real discrimination between levels. Note that "significance" here
+measures impact/urgency of the work item, not whether it's a highlight-
+worthy insight — a separate downstream synthesis pass decides what's worth
+surfacing as an insight from the full set of scored work items you output.
 
 Your task:
-1. **Hard-exclude status/progress noise.** A candidate that merely reports
-   an event happened — "session completed successfully", "N tests passing",
-   "run X finished", "PR merged" — is NOT an insight, even if it mentions
-   architecture, decisions, or strategy in passing. An insight has to say
-   something that changes what the reader would do or believe next time;
-   a status update does not. Reject these outright, do not lower their
-   score — they should not appear in the output at all.
-   - Negative example (REJECT): "Pensieve scaffold (run 1) completed and
-     approved: TS project setup, SQLite schema, 12 passing tests, clean
-     lint/build." — this is a log line, not an insight.
-   - Positive example (KEEP): "Two-pass extraction architecture locked:
-     Haiku does cheap high-recall candidate generation; Sonnet verifies
-     once daily in batch." — this is a decision with a stated rationale,
-     not a status report.
-2. **Reject hallucinations**: For each candidate, verify that the evidenceSnippet actually supports the claimed insight. If it doesn't substantiate the claim, reject it.
-3. **Merge same-meaning duplicates**: Identify candidates that describe the same underlying fact in different phrasing and merge them into one insight.
+1. **Reject hallucinations**: For each candidate, verify that the evidenceSnippet actually supports the claimed work item. If it doesn't substantiate the claim, reject it.
+2. **Merge same-meaning duplicates**: Identify candidates that describe the same underlying fact in different phrasing and merge them into one work item.
+3. **Verify category fit**: The seven categories are architecture_decisions, exploration, mechanical_labor, bug_fix, ai_correction_load, friction_audit, high_potential_seeds (see below for the exact boundary between bug_fix and friction_audit, and between architecture_decisions and exploration). Re-categorize a candidate if Haiku mistagged it — do not just trust the incoming category.
+   - architecture_decisions: a choice was made, with a stated reason. If no conclusion was reached, it's exploration instead.
+   - exploration: research/investigation, whether or not it led anywhere.
+   - mechanical_labor: implementation, testing, routine/known execution — including strong AI-assisted implementation and routine status narration ("tests passing", "build clean").
+   - bug_fix: root cause diagnosed AND resolution applied — the fix itself.
+   - friction_audit: the blocker/obstacle/symptom itself, NOT a code bug and NOT yet resolved (if it's a code bug with a stated fix, that's bug_fix instead).
+   - ai_correction_load: AI-specific mistake the user caught/fixed.
+   - high_potential_seeds: a deferred future idea, not yet acted on.
 4. **Score significance using this rubric** (1-5, be discriminating — do not default to the middle):
    - 1 = cosmetic/trivial; no reader action implied.
    - 2 = minor; low impact, worth a footnote.
    - 3 = moderate; worth noting, not urgent, no immediate action needed.
    - 4 = significant; actionable, affects reliability/correctness/velocity.
    - 5 = critical; production bug, data loss, security issue, or a decision that changes the architecture.
-5. **Polish text**: Refine the insight text to be clear, concise, and actionable.
+5. **Polish text**: Refine the work item text to be clear, concise, and actionable.
 6. **Classify effort**: Assign effortClass — orthogonal to category, answers
-   "what kind of work produced this," not "what kind of thing is this":
+   "what kind of work produced this," not "what kind of thing is this."
+   Every category can pair with any effort value, with no fixed mapping —
+   including bug_fix, which is NOT locked to any single effort value:
    - toil: mechanical/repetitive work that shouldn't have needed a human
      more than once (e.g. the same manual workaround applied repeatedly
      because nobody fixed the root cause; a fix that "recurred" before
@@ -77,13 +76,21 @@ Your task:
      (diagnosing an unfamiliar bug, weighing a real tradeoff, architecting
      a fix).
    - overhead: necessary but zero-signal cost — waiting, setup, tool
-     friction — neither toil nor judgment, just tax on the session.
-   Two insights can share a category but differ here: a hard, non-repeatable
-   bug and a manual fix applied twice because the root cause was never
-   addressed are both plausibly friction_audit, but the first is judgment
-   and the second is toil.
+     friction, a regression that sat unnoticed for a while — neither toil
+     nor judgment, just tax on the session.
+   Two work items can share a category but differ here: a novel,
+   hard-to-diagnose bug_fix requiring real investigation is judgment; the
+   same known fix mechanically reapplied because the root cause was never
+   addressed is bug_fix + toil; a bug that existed silently for a while
+   before being noticed, where the cost is mostly drag rather than either
+   diagnosis or repetition, is bug_fix + overhead.
 
-Output only approved insights with all fields populated. recurrenceOf may be left null for every candidate — the embedding-based recurrence pass downstream will set it independently; do not spend effort guessing it from the pasted history.`;
+Output every candidate as a scored, categorized work item with all fields
+populated — do not omit routine or low-significance items, they still
+matter for effort/category accounting even if they never surface as a
+highlighted insight. recurrenceOf may be left null for every candidate —
+the embedding-based recurrence pass downstream will set it independently;
+do not spend effort guessing it from the pasted history.`;
 
 export async function verifyAndScore(
   candidatesWithSource: CandidateWithSource[],
@@ -152,12 +159,13 @@ Process these candidates: reject hallucinations, merge near-duplicates, score si
                   category: {
                     type: 'string',
                     enum: [
-                      'strategic_value',
-                      'decision_record',
+                      'architecture_decisions',
+                      'exploration',
+                      'mechanical_labor',
+                      'bug_fix',
+                      'ai_correction_load',
                       'friction_audit',
                       'high_potential_seeds',
-                      'ai_leverage',
-                      'ai_correction_load',
                     ],
                   },
                   text: { type: 'string' },
