@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import type { TopInsight } from '../types';
+import type { TopInsight, InsightCategory, EffortClass } from '../types';
 import { LabelEditor } from './LabelEditor';
+import { CategoryEffortFilter } from './CategoryEffortFilter';
 
 interface Props {
   insights: TopInsight[];
@@ -21,12 +22,46 @@ function badgeRow(insight: TopInsight) {
 
 export function InsightList({ insights, onLabelSaved }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>('significance');
+  const [selectedCategories, setSelectedCategories] = useState<InsightCategory[]>([]);
+  const [selectedEfforts, setSelectedEfforts] = useState<EffortClass[]>([]);
 
   if (insights.length === 0) {
     return <div className="empty-state">No insights for this scope.</div>;
   }
 
-  const sorted = [...insights].sort((a, b) => {
+  const filtered = insights.filter(
+    (insight) =>
+      (selectedCategories.length === 0 || selectedCategories.includes(insight.category)) &&
+      (selectedEfforts.length === 0 || selectedEfforts.includes(insight.effortClass)),
+  );
+
+  const toggleCategory = (category: InsightCategory) => {
+    setSelectedCategories((prev) =>
+      prev.includes(category) ? prev.filter((c) => c !== category) : [...prev, category],
+    );
+  };
+
+  const toggleEffort = (effort: EffortClass) => {
+    setSelectedEfforts((prev) =>
+      prev.includes(effort) ? prev.filter((e) => e !== effort) : [...prev, effort],
+    );
+  };
+
+  if (filtered.length === 0 && insights.length > 0) {
+    return (
+      <>
+        <CategoryEffortFilter
+          selectedCategories={selectedCategories}
+          selectedEfforts={selectedEfforts}
+          onToggleCategory={toggleCategory}
+          onToggleEffort={toggleEffort}
+        />
+        <div className="empty-state">No insights match the selected filters.</div>
+      </>
+    );
+  }
+
+  const sorted = [...filtered].sort((a, b) => {
     if (sortKey === 'significance') return b.significanceScore - a.significanceScore;
     if (sortKey === 'category') return a.category.localeCompare(b.category);
     return a.effortClass.localeCompare(b.effortClass);
@@ -34,6 +69,12 @@ export function InsightList({ insights, onLabelSaved }: Props) {
 
   return (
     <>
+      <CategoryEffortFilter
+        selectedCategories={selectedCategories}
+        selectedEfforts={selectedEfforts}
+        onToggleCategory={toggleCategory}
+        onToggleEffort={toggleEffort}
+      />
       <div className="sort-controls">
         {(['significance', 'category', 'effort'] as SortKey[]).map((key) => (
           <button
