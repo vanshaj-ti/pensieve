@@ -128,17 +128,6 @@ export function AnalyticsPage({ filter, scopeLabel, route }: Props) {
 
   return (
     <>
-      <div className="filter-section" style={{ marginBottom: 20 }}>
-        <label htmlFor="date-picker">Date</label>
-        <select id="date-picker" value={date ?? ''} onChange={(e) => setDate(e.target.value)}>
-          {dates.map((d) => (
-            <option key={d} value={d}>
-              {d}
-            </option>
-          ))}
-        </select>
-      </div>
-
       <main className="analytics-grid">
         <StatStrip effortBreakdown={effortBreakdown} topInsights={topInsights} />
 
