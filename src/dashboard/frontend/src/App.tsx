@@ -1,18 +1,24 @@
 import { useEffect, useState } from 'react';
-import { useHashRoute, type Route } from './hooks/useHashRoute';
+import { useRoute, type Route } from './hooks/useRoute';
 import { fetchLabels, fetchProjects, fetchSessions } from './api';
 import type { LabelSummary, ProjectSummary, SessionSummary } from './types';
 import { AnalyticsPage } from './pages/AnalyticsPage';
+import { SessionsPage } from './pages/SessionsPage';
+import { SessionDetailPage } from './pages/SessionDetailPage';
 import type { AnalyticsFilter } from './types';
 
 function routeToFilter(route: Route): AnalyticsFilter {
   switch (route.kind) {
     case 'holistic':
+    case 'sessions':
+    case 'session-detail':
       return {};
     case 'project':
       return { projectDir: route.projectDir };
     case 'session':
       return { projectDir: route.projectDir, sessionId: route.sessionId };
+    case 'session-run':
+      return { projectDir: route.projectDir, sessionId: route.sessionId, label: route.label };
     case 'label':
       return { label: route.label };
   }
@@ -26,13 +32,19 @@ function routeScopeLabel(route: Route): string {
       return route.projectDir;
     case 'session':
       return `${route.projectDir} · ${route.sessionId}`;
+    case 'session-run':
+      return `${route.projectDir} · ${route.sessionId} · ${route.label}`;
     case 'label':
       return `Run: ${route.label}`;
+    case 'sessions':
+      return 'Sessions';
+    case 'session-detail':
+      return `${route.projectDir} · ${route.sessionId}`;
   }
 }
 
 export function App() {
-  const [route, setRoute] = useHashRoute();
+  const [route, setRoute] = useRoute();
   const [labels, setLabels] = useState<LabelSummary[]>([]);
   const [projects, setProjects] = useState<ProjectSummary[]>([]);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
@@ -139,14 +151,35 @@ export function App() {
           Holistic
         </button>
         <span className="crumb-sep">›</span>
-        <span className="crumb-current">{routeScopeLabel(route)}</span>
+        <button
+          className={route.kind === 'sessions' ? 'crumb active' : 'crumb'}
+          onClick={() => setRoute({ kind: 'sessions' })}
+        >
+          Sessions
+        </button>
+        {route.kind !== 'holistic' && route.kind !== 'sessions' && (
+          <>
+            <span className="crumb-sep">›</span>
+            <span className="crumb-current">{routeScopeLabel(route)}</span>
+          </>
+        )}
       </nav>
 
-      <AnalyticsPage
-        filter={routeToFilter(route)}
-        scopeLabel={routeScopeLabel(route)}
-        route={route}
-      />
+      {route.kind === 'sessions' ? (
+        <SessionsPage onNavigate={setRoute} />
+      ) : route.kind === 'session-detail' ? (
+        <SessionDetailPage
+          projectDir={route.projectDir}
+          sessionId={route.sessionId}
+          onNavigate={setRoute}
+        />
+      ) : (
+        <AnalyticsPage
+          filter={routeToFilter(route)}
+          scopeLabel={routeScopeLabel(route)}
+          route={route}
+        />
+      )}
     </div>
   );
 }

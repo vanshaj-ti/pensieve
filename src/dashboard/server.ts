@@ -1,10 +1,14 @@
 import express, { Application, Request, Response } from 'express';
 import path from 'path';
 import http from 'http';
+import { statSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import type Database from 'better-sqlite3';
 import { fileURLToPath } from 'url';
 import { Config } from '../config.js';
 import { openDb } from '../db/schema.js';
+import { listSessionFiles } from '../ingest/scanner.js';
+import { runDailyAnalysis } from '../pipeline.js';
 import {
   getCategoryTrend,
   getTopInsights,
@@ -16,10 +20,17 @@ import {
   getLabels,
   getProjects,
   getSessions,
+  getSessionRuns,
   updateLabelsForSession,
   getEffortByCategory,
   type AnalyticsFilter,
 } from '../analytics/index.js';
+
+interface AnalyzeJob {
+  status: 'queued' | 'running' | 'done' | 'failed';
+  insightsPersisted?: number;
+  error?: string;
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -56,6 +67,7 @@ function parseFilter(req: Request): AnalyticsFilter {
 export function createDashboardServer(config: Config): Application {
   const app = express();
   const db = openDb(config.dbPath);
+  const analyzeJobs = new Map<string, AnalyzeJob>();
 
   // Always resolves to the repo root's dist/dashboard/public, regardless of
   // whether this file is running from src/dashboard (dev/test via tsx/vitest)
@@ -211,6 +223,103 @@ export function createDashboardServer(config: Config): Application {
     }
   });
 
+  app.get('/api/sessions/all', (req: Request, res: Response) => {
+    try {
+      const diskSessions = listSessionFiles();
+      const analyzed = getSessions(db);
+      const analyzedMap = new Map(analyzed.map((s) => [`${s.projectDir}/${s.sessionId}`, s]));
+
+      const merged = diskSessions.map((sf) => {
+        const key = `${sf.projectDir}/${sf.sessionId}`;
+        const dbEntry = analyzedMap.get(key);
+        let mtime = '';
+        try {
+          mtime = statSync(sf.filePath).mtime.toISOString();
+        } catch {
+          mtime = '';
+        }
+        return {
+          projectDir: sf.projectDir,
+          sessionId: sf.sessionId,
+          mtime,
+          analyzed: dbEntry !== undefined,
+          runCount: dbEntry?.count ?? 0,
+        };
+      });
+
+      merged.sort((a, b) => {
+        if (a.projectDir !== b.projectDir) return a.projectDir.localeCompare(b.projectDir);
+        return b.mtime.localeCompare(a.mtime);
+      });
+
+      res.json(merged);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to list sessions' });
+    }
+  });
+
+  app.get('/api/session-runs', (req: Request, res: Response) => {
+    try {
+      const project = req.query.project as string | undefined;
+      const session = req.query.session as string | undefined;
+      if (!project || !session) {
+        return res.status(400).json({ error: 'project and session query params are required' });
+      }
+      res.json(getSessionRuns(db, project, session));
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch session runs' });
+    }
+  });
+
+  app.post('/api/sessions/analyze', (req: Request, res: Response) => {
+    try {
+      const { projectDir, sessionId, label } = req.body as {
+        projectDir?: string;
+        sessionId?: string;
+        label?: string;
+      };
+      if (!projectDir || !sessionId) {
+        return res.status(400).json({ error: 'Body must include projectDir and sessionId' });
+      }
+
+      const jobId = randomUUID();
+      analyzeJobs.set(jobId, { status: 'queued' });
+
+      analyzeJobs.set(jobId, { status: 'running' });
+      runDailyAnalysis({
+        projectFilter: projectDir,
+        sessionFilter: sessionId,
+        label,
+        force: true,
+        db,
+      })
+        .then((result) => {
+          analyzeJobs.set(jobId, {
+            status: 'done',
+            insightsPersisted: result.insightsPersisted,
+          });
+        })
+        .catch((err) => {
+          analyzeJobs.set(jobId, {
+            status: 'failed',
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
+
+      res.json({ jobId });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to start analysis' });
+    }
+  });
+
+  app.get('/api/sessions/analyze/:jobId', (req: Request, res: Response) => {
+    const job = analyzeJobs.get(req.params.jobId);
+    if (!job) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+    res.json(job);
+  });
+
   app.post('/api/labels', (req: Request, res: Response) => {
     try {
       const { projectDir, sessionId, oldLabel, label } = req.body as {
@@ -229,6 +338,13 @@ export function createDashboardServer(config: Config): Application {
     } catch (error) {
       res.status(500).json({ error: 'Failed to update label' });
     }
+  });
+
+  // SPA fallback: any non-API GET (e.g. /sessions, /project/x) is a client-side
+  // route the React router owns, not a real server resource — serve the app
+  // shell and let it resolve the path. Must come after every /api/* route.
+  app.get(/^(?!\/api\/).*/, (req: Request, res: Response) => {
+    res.sendFile(path.join(publicDir, 'index.html'));
   });
 
   return app;

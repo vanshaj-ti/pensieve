@@ -75,6 +75,38 @@ export function getSessions(db: Database.Database, projectDir?: string): Session
   }));
 }
 
+export interface SessionRun {
+  label: string;
+  insightCount: number;
+  latestAt: string;
+}
+
+/** Every distinct analysis run (label) for one project+session, newest first. */
+export function getSessionRuns(
+  db: Database.Database,
+  projectDir: string,
+  sessionId: string,
+): SessionRun[] {
+  const rows = db
+    .prepare(
+      `
+    SELECT e.label, COUNT(*) as count, MAX(i.created_at) as latest_at
+    FROM insights i
+    JOIN episodes e ON i.episode_id = e.id
+    WHERE e.project_dir = ? AND e.session_id = ?
+    GROUP BY e.label
+    ORDER BY latest_at DESC
+  `,
+    )
+    .all(projectDir, sessionId) as Array<{ label: string; count: number; latest_at: string }>;
+
+  return rows.map((row) => ({
+    label: row.label,
+    insightCount: row.count,
+    latestAt: row.latest_at,
+  }));
+}
+
 /**
  * Re-labels the episodes for one project+session that currently carry
  * oldLabel — scoped by oldLabel (not just project+session) so relabeling

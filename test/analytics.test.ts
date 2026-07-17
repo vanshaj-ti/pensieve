@@ -12,6 +12,7 @@ import {
   getLabels,
   getProjects,
   getSessions,
+  getSessionRuns,
   updateLabelsForSession,
   getEffortByCategory,
 } from '../src/analytics/index.js';
@@ -798,6 +799,42 @@ describe('analytics', () => {
       const result = getEffortByCategory(db, '2026-07-15', { label: 'run-a' });
       expect(result).toEqual([
         { category: 'friction_audit', toil: 1, judgment: 0, overhead: 0, total: 1 },
+      ]);
+    });
+  });
+
+  describe('getSessionRuns', () => {
+    it('returns empty array for a session with no insights', () => {
+      const result = getSessionRuns(db, '/tmp/project', 'session-1');
+      expect(result).toEqual([]);
+    });
+
+    it('groups by label, newest first, scoped to project+session', () => {
+      db.prepare(
+        `
+        INSERT INTO episodes (date, project_dir, session_id, start_line, end_line, label)
+        VALUES
+          ('2026-07-15', '/tmp/project', 'session-1', 1, 10, 'run-old'),
+          ('2026-07-16', '/tmp/project', 'session-1', 11, 20, 'run-new'),
+          ('2026-07-15', '/tmp/project', 'session-2', 1, 10, 'run-other-session')
+      `,
+      ).run();
+
+      db.prepare(
+        `
+        INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, effort_class, verified_by_git, recurrence_of, created_at)
+        VALUES
+          (1, 'strategic_value', 'Old run insight 1', 'ref1', 3, 'judgment', NULL, NULL, '2026-07-15T10:00:00Z'),
+          (1, 'strategic_value', 'Old run insight 2', 'ref2', 3, 'judgment', NULL, NULL, '2026-07-15T11:00:00Z'),
+          (2, 'strategic_value', 'New run insight', 'ref3', 3, 'judgment', NULL, NULL, '2026-07-16T10:00:00Z'),
+          (3, 'strategic_value', 'Other session insight', 'ref4', 3, 'judgment', NULL, NULL, '2026-07-15T10:00:00Z')
+      `,
+      ).run();
+
+      const result = getSessionRuns(db, '/tmp/project', 'session-1');
+      expect(result).toEqual([
+        { label: 'run-new', insightCount: 1, latestAt: '2026-07-16T10:00:00Z' },
+        { label: 'run-old', insightCount: 2, latestAt: '2026-07-15T11:00:00Z' },
       ]);
     });
   });

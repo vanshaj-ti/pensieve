@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { Route } from '../hooks/useHashRoute';
+import type { Route } from '../hooks/useRoute';
 import type {
   AnalyticsFilter,
   CategoryTrendPoint,

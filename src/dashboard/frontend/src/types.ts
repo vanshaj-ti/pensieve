@@ -87,3 +87,25 @@ export interface AnalyticsFilter {
   projectDir?: string;
   sessionId?: string;
 }
+
+export interface DiskSession {
+  projectDir: string;
+  sessionId: string;
+  mtime: string;
+  analyzed: boolean;
+  runCount: number;
+}
+
+export interface SessionRun {
+  label: string;
+  insightCount: number;
+  latestAt: string;
+}
+
+export type AnalyzeJobStatus = 'queued' | 'running' | 'done' | 'failed';
+
+export interface AnalyzeJob {
+  status: AnalyzeJobStatus;
+  insightsPersisted?: number;
+  error?: string;
+}
