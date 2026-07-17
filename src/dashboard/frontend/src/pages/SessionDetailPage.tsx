@@ -56,7 +56,7 @@ export function SessionDetailPage({ projectDir, sessionId, onNavigate }: Props) 
         </h2>
         <div className="badge-row" style={{ marginBottom: 16 }}>
           <button
-            className="label-edit-btn"
+            className="btn btn-primary"
             disabled={!!analyzing}
             onClick={() => start(jobKey, projectDir, sessionId)}
           >
@@ -74,15 +74,17 @@ export function SessionDetailPage({ projectDir, sessionId, onNavigate }: Props) 
         ) : (
           <ul className="insight-list">
             {runs.map((run) => (
-              <li className="insight-item" key={run.label}>
-                <div className="badge-row">
-                  <span className="badge badge-category">{run.label || '(default)'}</span>
-                  <span className="badge badge-score">{run.insightCount} insights</span>
+              <li className="session-row" key={run.label}>
+                <div className="session-row-main">
+                  <div className="badge-row">
+                    <span className="badge badge-category">{run.label || '(default)'}</span>
+                    <span className="badge badge-score">{run.insightCount} insights</span>
+                  </div>
+                  <span className="insight-meta">{relativeTime(run.latestAt)}</span>
                 </div>
-                <div className="insight-meta">
-                  <span>{relativeTime(run.latestAt)}</span>
+                <div className="session-row-actions">
                   <RouteLink
-                    className="label-edit-btn"
+                    className="btn btn-primary"
                     onNavigate={onNavigate}
                     to={{
                       kind: 'session-run',

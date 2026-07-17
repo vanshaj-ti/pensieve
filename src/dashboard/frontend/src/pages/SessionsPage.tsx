@@ -240,17 +240,30 @@ function ProjectSessions({
                       Analyze
                     </button>
                     {s.analyzed && (
-                      <RouteLink
-                        className="btn btn-primary"
-                        onNavigate={onNavigate}
-                        to={{
-                          kind: 'session-detail',
-                          projectDir: s.projectDir,
-                          sessionId: s.sessionId,
-                        }}
-                      >
-                        View
-                      </RouteLink>
+                      <>
+                        <RouteLink
+                          className="btn"
+                          onNavigate={onNavigate}
+                          to={{
+                            kind: 'session-detail',
+                            projectDir: s.projectDir,
+                            sessionId: s.sessionId,
+                          }}
+                        >
+                          Runs
+                        </RouteLink>
+                        <RouteLink
+                          className="btn btn-primary"
+                          onNavigate={onNavigate}
+                          to={{
+                            kind: 'session',
+                            projectDir: s.projectDir,
+                            sessionId: s.sessionId,
+                          }}
+                        >
+                          Analytics
+                        </RouteLink>
+                      </>
                     )}
                   </div>
                 </li>
