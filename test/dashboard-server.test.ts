@@ -18,6 +18,7 @@ import {
   getLabels,
   getProjects,
   getSessions,
+  getSessionRuns,
   getEffortByCategory,
 } from '../src/analytics/index.js';
 
@@ -315,6 +316,69 @@ describe('dashboard server', () => {
     it('returns 400 for missing date', async () => {
       const res = await fetch(`http://localhost:${port}/api/effort-by-category`);
       expect(res.status).toBe(400);
+    });
+  });
+
+  describe('GET /api/sessions/all', () => {
+    it('returns 200 with an array (real disk scan, contents not asserted)', async () => {
+      const res = await fetch(`http://localhost:${port}/api/sessions/all`);
+      expect(res.status).toBe(200);
+      const apiData = await res.json();
+      expect(Array.isArray(apiData)).toBe(true);
+    });
+  });
+
+  describe('GET /api/session-runs', () => {
+    it('returns session runs matching getSessionRuns', async () => {
+      const res = await fetch(
+        `http://localhost:${port}/api/session-runs?project=/project-a&session=session-1`,
+      );
+      expect(res.status).toBe(200);
+      const apiData = await res.json();
+      const expected = getSessionRuns(dbForAnalytics, '/project-a', 'session-1');
+      expect(apiData).toEqual(expected);
+    });
+
+    it('returns 400 when project is missing', async () => {
+      const res = await fetch(`http://localhost:${port}/api/session-runs?session=session-1`);
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 400 when session is missing', async () => {
+      const res = await fetch(`http://localhost:${port}/api/session-runs?project=/project-a`);
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe('POST /api/sessions/analyze + GET /api/sessions/analyze/:jobId', () => {
+    it('returns 400 when required fields are missing', async () => {
+      const res = await fetch(`http://localhost:${port}/api/sessions/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectDir: '/project-a' }),
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 404 for an unknown jobId', async () => {
+      const res = await fetch(`http://localhost:${port}/api/sessions/analyze/unknown-job-id`);
+      expect(res.status).toBe(404);
+    });
+
+    it('starting a job returns a jobId pollable via the status endpoint', async () => {
+      const res = await fetch(`http://localhost:${port}/api/sessions/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectDir: '/project-a', sessionId: 'session-1' }),
+      });
+      expect(res.status).toBe(200);
+      const { jobId } = await res.json();
+      expect(typeof jobId).toBe('string');
+
+      const statusRes = await fetch(`http://localhost:${port}/api/sessions/analyze/${jobId}`);
+      expect(statusRes.status).toBe(200);
+      const job = await statusRes.json();
+      expect(['queued', 'running', 'done', 'failed']).toContain(job.status);
     });
   });
 });

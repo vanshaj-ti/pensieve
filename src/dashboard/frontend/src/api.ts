@@ -1,6 +1,8 @@
 import type {
   AnalyticsFilter,
+  AnalyzeJob,
   CategoryTrendPoint,
+  DiskSession,
   EffortBreakdown,
   EffortBreakdownTrendPoint,
   EffortByCategoryPoint,
@@ -8,6 +10,7 @@ import type {
   ProjectRollup,
   ProjectSummary,
   RecurrenceChain,
+  SessionRun,
   SessionSummary,
   TopInsight,
 } from './types';
@@ -18,7 +21,7 @@ async function fetchJson<T>(url: string, label: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-function buildQuery(params: Record<string, string | number | undefined>): string {
+function buildQuery(params: Record<string, string | number | undefined> | AnalyticsFilter): string {
   const usp = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
     if (value !== undefined && value !== '') {
@@ -80,6 +83,34 @@ export const fetchProjects = () => fetchJson<ProjectSummary[]>('/api/projects', 
 
 export const fetchSessions = (project?: string) =>
   fetchJson<SessionSummary[]>(`/api/sessions${buildQuery({ project })}`, 'sessions');
+
+export const fetchSessionsAll = () => fetchJson<DiskSession[]>('/api/sessions/all', 'all sessions');
+
+export const fetchSessionRuns = (projectDir: string, sessionId: string) =>
+  fetchJson<SessionRun[]>(
+    `/api/session-runs${buildQuery({ project: projectDir, session: sessionId })}`,
+    'session runs',
+  );
+
+export async function postAnalyzeSession(
+  projectDir: string,
+  sessionId: string,
+  label?: string,
+): Promise<{ jobId: string }> {
+  const res = await fetch('/api/sessions/analyze', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectDir, sessionId, label }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}) as { error?: string });
+    throw new Error(data.error || 'Failed to start analysis');
+  }
+  return res.json();
+}
+
+export const fetchAnalyzeJob = (jobId: string) =>
+  fetchJson<AnalyzeJob>(`/api/sessions/analyze/${encodeURIComponent(jobId)}`, 'analyze job');
 
 export async function postLabel(
   projectDir: string,
