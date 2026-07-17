@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { fetchSessionsAll } from '../api';
-import type { DiskSession } from '../types';
+import { fetchSessionProjects, fetchSessionsAll } from '../api';
+import type { DiskSession, SessionProject } from '../types';
 import { useAnalyzeJob } from '../hooks/useAnalyzeJob';
 import type { Route } from '../hooks/useRoute';
 import { RouteLink } from '../components/RouteLink';
@@ -8,6 +8,8 @@ import { RouteLink } from '../components/RouteLink';
 interface Props {
   onNavigate: (route: Route) => void;
 }
+
+const PAGE_SIZE = 20;
 
 function relativeTime(iso: string): string {
   if (!iso) return '—';
@@ -21,35 +23,25 @@ function relativeTime(iso: string): string {
   return `${days}d ago`;
 }
 
-export function SessionsPage({ onNavigate }: Props) {
-  const [sessions, setSessions] = useState<DiskSession[] | null>(null);
+function ProjectList({ onSelect }: { onSelect: (projectDir: string) => void }) {
+  const [projects, setProjects] = useState<SessionProject[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const load = () => {
-    fetchSessionsAll()
-      .then(setSessions)
-      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load sessions'));
-  };
-
-  useEffect(load, []);
-
-  const { jobs, start } = useAnalyzeJob(load);
+  useEffect(() => {
+    fetchSessionProjects()
+      .then(setProjects)
+      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load projects'));
+  }, []);
 
   if (error) {
-    return <div className="error-banner">Failed to load sessions: {error}</div>;
+    return <div className="error-banner">Failed to load projects: {error}</div>;
   }
 
-  if (!sessions) {
+  if (!projects) {
     return null;
   }
 
-  const byProject = new Map<string, DiskSession[]>();
-  for (const s of sessions) {
-    if (!byProject.has(s.projectDir)) byProject.set(s.projectDir, []);
-    byProject.get(s.projectDir)!.push(s);
-  }
-
-  if (sessions.length === 0) {
+  if (projects.length === 0) {
     return (
       <div className="empty-state" style={{ gridColumn: '1 / -1' }}>
         No Claude Code sessions found under ~/.claude/projects/.
@@ -59,11 +51,76 @@ export function SessionsPage({ onNavigate }: Props) {
 
   return (
     <main>
-      {Array.from(byProject.entries()).map(([projectDir, projSessions]) => (
-        <section className="card span-full" key={projectDir}>
-          <h2>{projectDir}</h2>
+      <section className="card span-full">
+        <h2>Projects</h2>
+        <ul className="insight-list">
+          {projects.map((p) => (
+            <li className="insight-item" key={p.projectDir}>
+              <button
+                className="label-edit-btn"
+                style={{ fontSize: '0.9rem', textAlign: 'left' }}
+                onClick={() => onSelect(p.projectDir)}
+              >
+                {p.cwd || p.projectDir}
+              </button>
+              <div className="insight-meta">
+                <span>{p.sessionCount} sessions</span>
+                <span>{p.analyzedCount} analyzed</span>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </section>
+    </main>
+  );
+}
+
+function ProjectSessions({
+  projectDir,
+  onBack,
+  onNavigate,
+}: {
+  projectDir: string;
+  onBack: () => void;
+  onNavigate: (route: Route) => void;
+}) {
+  const [page, setPage] = useState(1);
+  const [sessions, setSessions] = useState<DiskSession[] | null>(null);
+  const [totalPages, setTotalPages] = useState(1);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = () => {
+    fetchSessionsAll(projectDir, page, PAGE_SIZE)
+      .then((res) => {
+        setSessions(res.sessions);
+        setTotalPages(res.totalPages);
+      })
+      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load sessions'));
+  };
+
+  useEffect(load, [projectDir, page]);
+
+  const { jobs, start } = useAnalyzeJob(load);
+
+  return (
+    <main>
+      <section className="card span-full">
+        <h2>
+          <button className="label-edit-btn" onClick={onBack}>
+            ← Projects
+          </button>
+          <span className="card-hint">{projectDir}</span>
+        </h2>
+
+        {error && <div className="error-banner">Failed to load sessions: {error}</div>}
+
+        {sessions && sessions.length === 0 && (
+          <div className="empty-state">No sessions found for this project.</div>
+        )}
+
+        {sessions && sessions.length > 0 && (
           <ul className="insight-list">
-            {projSessions.map((s) => {
+            {sessions.map((s) => {
               const key = `${s.projectDir}/${s.sessionId}`;
               const job = jobs[key];
               const analyzing = job && job.status !== 'done' && job.status !== 'failed';
@@ -71,9 +128,18 @@ export function SessionsPage({ onNavigate }: Props) {
               return (
                 <li className="insight-item" key={s.sessionId}>
                   <div className="badge-row">
-                    <span className="insight-text" style={{ fontFamily: 'monospace' }}>
-                      {s.sessionId}
-                    </span>
+                    {s.title ? (
+                      <>
+                        <span className="insight-text">{s.title}</span>
+                        <span className="insight-meta" style={{ fontFamily: 'monospace' }}>
+                          {s.sessionId}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="insight-text" style={{ fontFamily: 'monospace' }}>
+                        {s.sessionId}
+                      </span>
+                    )}
                   </div>
                   <div className="insight-meta">
                     <span>{relativeTime(s.mtime)}</span>
@@ -116,8 +182,46 @@ export function SessionsPage({ onNavigate }: Props) {
               );
             })}
           </ul>
-        </section>
-      ))}
+        )}
+
+        {totalPages > 1 && (
+          <div className="badge-row" style={{ justifyContent: 'center', gap: 12, marginTop: 16 }}>
+            <button
+              className="label-edit-btn"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => p - 1)}
+            >
+              ← Prev
+            </button>
+            <span className="insight-meta">
+              Page {page} of {totalPages}
+            </span>
+            <button
+              className="label-edit-btn"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Next →
+            </button>
+          </div>
+        )}
+      </section>
     </main>
   );
+}
+
+export function SessionsPage({ onNavigate }: Props) {
+  const [selectedProject, setSelectedProject] = useState<string | null>(null);
+
+  if (selectedProject) {
+    return (
+      <ProjectSessions
+        projectDir={selectedProject}
+        onBack={() => setSelectedProject(null)}
+        onNavigate={onNavigate}
+      />
+    );
+  }
+
+  return <ProjectList onSelect={setSelectedProject} />;
 }

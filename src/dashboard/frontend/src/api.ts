@@ -2,7 +2,8 @@ import type {
   AnalyticsFilter,
   AnalyzeJob,
   CategoryTrendPoint,
-  DiskSession,
+  PaginatedSessions,
+  SessionProject,
   EffortBreakdown,
   EffortBreakdownTrendPoint,
   EffortByCategoryPoint,
@@ -84,7 +85,14 @@ export const fetchProjects = () => fetchJson<ProjectSummary[]>('/api/projects', 
 export const fetchSessions = (project?: string) =>
   fetchJson<SessionSummary[]>(`/api/sessions${buildQuery({ project })}`, 'sessions');
 
-export const fetchSessionsAll = () => fetchJson<DiskSession[]>('/api/sessions/all', 'all sessions');
+export const fetchSessionProjects = () =>
+  fetchJson<SessionProject[]>('/api/session-projects', 'session projects');
+
+export const fetchSessionsAll = (projectDir: string, page = 1, pageSize = 20) =>
+  fetchJson<PaginatedSessions>(
+    `/api/sessions/all${buildQuery({ project: projectDir, page, pageSize })}`,
+    'all sessions',
+  );
 
 export const fetchSessionRuns = (projectDir: string, sessionId: string) =>
   fetchJson<SessionRun[]>(

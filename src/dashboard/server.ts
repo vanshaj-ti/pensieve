@@ -7,7 +7,7 @@ import type Database from 'better-sqlite3';
 import { fileURLToPath } from 'url';
 import { Config } from '../config.js';
 import { openDb } from '../db/schema.js';
-import { listSessionFiles } from '../ingest/scanner.js';
+import { listSessionFiles, readSessionMetadata } from '../ingest/scanner.js';
 import { runDailyAnalysis } from '../pipeline.js';
 import {
   getCategoryTrend,
@@ -51,6 +51,25 @@ function parsePositiveInt(value: string | undefined, defaultVal: number): number
   const num = parseInt(value, 10);
   if (isNaN(num) || num <= 0) return null;
   return num;
+}
+
+/**
+ * Excludes scratch sessions run against macOS/Linux system temp dirs.
+ * Accepts either a real path (from JSONL `cwd`, slash-separated) or a
+ * sanitized project-dir name (dash-separated, e.g. Claude Code's own
+ * `-private-tmp-foo` directory naming) as a fallback when `cwd` is
+ * unavailable — both forms are checked against the same temp-dir prefixes.
+ */
+function isTempPath(p: string): boolean {
+  return (
+    p.startsWith('/tmp/') ||
+    p.startsWith('/private/tmp/') ||
+    p.startsWith('/private/tmp') ||
+    p.startsWith('-private-tmp') ||
+    p.startsWith('-tmp-') ||
+    /^\/private\/var\/folders\/.*\/T\//.test(p) ||
+    /^-private-var-folders-.*-T-/.test(p)
+  );
 }
 
 function parseFilter(req: Request): AnalyticsFilter {
@@ -223,36 +242,112 @@ export function createDashboardServer(config: Config): Application {
     }
   });
 
+  app.get('/api/session-projects', (req: Request, res: Response) => {
+    try {
+      // One representative session's cwd stands in for the whole project's
+      // display name (all sessions under one projectDir share the same
+      // real filesystem path) — only reads one file per project, not one
+      // per session, so this stays cheap even with thousands of sessions.
+      const analyzed = getSessions(db);
+      const analyzedCountByProject = new Map<string, number>();
+      for (const s of analyzed) {
+        analyzedCountByProject.set(
+          s.projectDir,
+          (analyzedCountByProject.get(s.projectDir) ?? 0) + 1,
+        );
+      }
+
+      const byProject = new Map<string, { sessionCount: number; sampleFilePath: string }>();
+      for (const sf of listSessionFiles()) {
+        if (isTempPath(sf.projectDir)) continue;
+        const existing = byProject.get(sf.projectDir);
+        if (existing) {
+          existing.sessionCount++;
+        } else {
+          byProject.set(sf.projectDir, { sessionCount: 1, sampleFilePath: sf.filePath });
+        }
+      }
+
+      const projects = Array.from(byProject.entries())
+        .map(([projectDir, { sessionCount, sampleFilePath }]) => {
+          const { cwd } = readSessionMetadata(sampleFilePath);
+          return {
+            projectDir,
+            cwd,
+            sessionCount,
+            analyzedCount: analyzedCountByProject.get(projectDir) ?? 0,
+          };
+        })
+        .sort((a, b) => (a.cwd ?? a.projectDir).localeCompare(b.cwd ?? b.projectDir));
+
+      res.json(projects);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to list session projects' });
+    }
+  });
+
   app.get('/api/sessions/all', (req: Request, res: Response) => {
     try {
-      const diskSessions = listSessionFiles();
-      const analyzed = getSessions(db);
+      const projectDir = req.query.project as string | undefined;
+      if (!projectDir) {
+        return res.status(400).json({ error: 'project query param is required' });
+      }
+
+      const page = parsePositiveInt(req.query.page as string, 1);
+      if (page === null) {
+        return res
+          .status(400)
+          .json({ error: 'Invalid page parameter: must be a positive integer' });
+      }
+      const rawPageSize = parsePositiveInt(req.query.pageSize as string, 20);
+      if (rawPageSize === null) {
+        return res
+          .status(400)
+          .json({ error: 'Invalid pageSize parameter: must be a positive integer' });
+      }
+      const pageSize = Math.min(rawPageSize, 100);
+
+      // Filter/sort/paginate on cheap fields (dir name, stat mtime) first —
+      // readSessionMetadata does a full-file read per session, which at
+      // real scale (thousands of sessions across projects/worktrees) is
+      // too slow to run on every session on every request. Only the final
+      // page's worth of sessions get their JSONL read for cwd/title.
+      const analyzed = getSessions(db, projectDir);
       const analyzedMap = new Map(analyzed.map((s) => [`${s.projectDir}/${s.sessionId}`, s]));
 
-      const merged = diskSessions.map((sf) => {
-        const key = `${sf.projectDir}/${sf.sessionId}`;
-        const dbEntry = analyzedMap.get(key);
-        let mtime = '';
-        try {
-          mtime = statSync(sf.filePath).mtime.toISOString();
-        } catch {
-          mtime = '';
-        }
-        return {
-          projectDir: sf.projectDir,
-          sessionId: sf.sessionId,
-          mtime,
-          analyzed: dbEntry !== undefined,
-          runCount: dbEntry?.count ?? 0,
-        };
+      const light = listSessionFiles()
+        .filter((sf) => sf.projectDir === projectDir)
+        .map((sf) => {
+          let mtime = '';
+          try {
+            mtime = statSync(sf.filePath).mtime.toISOString();
+          } catch {
+            mtime = '';
+          }
+          const dbEntry = analyzedMap.get(`${sf.projectDir}/${sf.sessionId}`);
+          return {
+            projectDir: sf.projectDir,
+            sessionId: sf.sessionId,
+            filePath: sf.filePath,
+            mtime,
+            analyzed: dbEntry !== undefined,
+            runCount: dbEntry?.count ?? 0,
+          };
+        });
+
+      light.sort((a, b) => b.mtime.localeCompare(a.mtime));
+
+      const total = light.length;
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      const start = (page - 1) * pageSize;
+      const pageSlice = light.slice(start, start + pageSize);
+
+      const sessions = pageSlice.map(({ filePath, ...rest }) => {
+        const { cwd, title } = readSessionMetadata(filePath);
+        return { ...rest, cwd, title };
       });
 
-      merged.sort((a, b) => {
-        if (a.projectDir !== b.projectDir) return a.projectDir.localeCompare(b.projectDir);
-        return b.mtime.localeCompare(a.mtime);
-      });
-
-      res.json(merged);
+      res.json({ sessions, page, pageSize, total, totalPages });
     } catch (error) {
       res.status(500).json({ error: 'Failed to list sessions' });
     }
