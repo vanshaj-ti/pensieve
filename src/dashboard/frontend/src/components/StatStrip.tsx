@@ -9,7 +9,7 @@ export function StatStrip({ effortBreakdown, topInsights }: Props) {
   const topScore = topInsights.length > 0 ? topInsights[0].significanceScore.toFixed(1) : '—';
 
   const stats = [
-    { label: 'Insights', value: String(effortBreakdown.total), cls: '' },
+    { label: 'Work Items', value: String(effortBreakdown.total), cls: '' },
     {
       label: 'Judgment',
       value: `${Math.round(effortBreakdown.judgmentRatio * 100)}%`,

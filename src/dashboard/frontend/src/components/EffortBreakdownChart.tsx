@@ -12,7 +12,7 @@ interface Props {
 
 export function EffortBreakdownChart({ data, byCategory }: Props) {
   if (data.total === 0) {
-    return <div className="empty-state">No insights for this scope.</div>;
+    return <div className="empty-state">No work items for this scope.</div>;
   }
 
   const topTimeSink = [...byCategory].sort(
