@@ -10,6 +10,7 @@ import type {
   EffortByCategoryPoint,
   LabelSummary,
   ProjectRollup,
+  ProjectEffortBreakdown,
   ProjectSummary,
   RecurrenceChain,
   SessionRun,
@@ -45,11 +46,22 @@ export const fetchCategoryTrend = (days: number, filter: AnalyticsFilter = {}) =
     'category trend',
   );
 
-export const fetchTopInsights = (date: string, limit: number, filter: AnalyticsFilter = {}) =>
-  fetchJson<TopInsight[]>(
-    `/api/top-insights${buildQuery({ date, limit, ...filter })}`,
+export const fetchTopInsights = (
+  date: string,
+  limit: number,
+  offset: number,
+  filter: AnalyticsFilter = {},
+) =>
+  fetchJson(
+    `/api/top-insights${buildQuery({ date, limit, offset, ...filter })}`,
     'top insights',
-  );
+  ) as Promise<{
+    insights: TopInsight[];
+    total: number;
+    totalPages: number;
+    limit: number;
+    offset: number;
+  }>;
 
 export const fetchRecurrenceChains = (days: number, filter: AnalyticsFilter = {}) =>
   fetchJson<RecurrenceChain[]>(
@@ -61,6 +73,12 @@ export const fetchCrossProject = (date: string, filter: AnalyticsFilter = {}) =>
   fetchJson<ProjectRollup[]>(
     `/api/cross-project${buildQuery({ date, ...filter })}`,
     'cross-project rollup',
+  );
+
+export const fetchProjectEffortBreakdown = (date: string, filter: AnalyticsFilter = {}) =>
+  fetchJson<ProjectEffortBreakdown[]>(
+    `/api/project-effort-breakdown${buildQuery({ date, ...filter })}`,
+    'project effort breakdown',
   );
 
 export const fetchEffortBreakdown = (date: string, filter: AnalyticsFilter = {}) =>
