@@ -51,7 +51,7 @@ describe('useAnalyzeJob', () => {
   it('polls fetchAnalyzeJob on timer advances', async () => {
     const { result } = renderHook(() => useAnalyzeJob());
     vi.mocked(api.postAnalyzeSession).mockResolvedValue({ jobId: 'remote-1' });
-    vi.mocked(api.fetchAnalyzeJob).mockResolvedValue({ status: 'processing' });
+    vi.mocked(api.fetchAnalyzeJob).mockResolvedValue({ status: 'running' });
 
     act(() => {
       result.current.start('job1', 'my-dir', 'session-123');
@@ -66,7 +66,7 @@ describe('useAnalyzeJob', () => {
     });
 
     expect(vi.mocked(api.fetchAnalyzeJob)).toHaveBeenCalled();
-    expect(result.current.jobs.job1).toEqual({ status: 'processing' });
+    expect(result.current.jobs.job1).toEqual({ status: 'running' });
   });
 
   it('clears interval and fires onDone when job reaches done', async () => {
@@ -160,7 +160,7 @@ describe('useAnalyzeJob', () => {
     const { result } = renderHook(() => useAnalyzeJob());
     vi.mocked(api.postAnalyzeSession).mockResolvedValue({ jobId: 'remote-id' });
     vi.mocked(api.fetchAnalyzeJob)
-      .mockResolvedValueOnce({ status: 'processing' })
+      .mockResolvedValueOnce({ status: 'running' })
       .mockResolvedValueOnce({ status: 'done' });
 
     act(() => {

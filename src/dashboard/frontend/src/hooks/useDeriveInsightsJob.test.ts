@@ -51,7 +51,7 @@ describe('useDeriveInsightsJob', () => {
   it('polls fetchDeriveInsightsJob on timer advances', async () => {
     const { result } = renderHook(() => useDeriveInsightsJob());
     vi.mocked(api.postDeriveInsights).mockResolvedValue({ jobId: 'remote-1' });
-    vi.mocked(api.fetchDeriveInsightsJob).mockResolvedValue({ status: 'processing' });
+    vi.mocked(api.fetchDeriveInsightsJob).mockResolvedValue({ status: 'running' });
 
     act(() => {
       result.current.start('my-dir', 'session-123', 'my-label');
@@ -66,7 +66,7 @@ describe('useDeriveInsightsJob', () => {
     });
 
     expect(vi.mocked(api.fetchDeriveInsightsJob)).toHaveBeenCalled();
-    expect(result.current.job).toEqual({ status: 'processing' });
+    expect(result.current.job).toEqual({ status: 'running' });
   });
 
   it('clears timer and fires onDone when job reaches done', async () => {
