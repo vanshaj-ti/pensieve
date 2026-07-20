@@ -1,27 +1,15 @@
-import { useState } from 'react';
-import type { RecurrenceChain, InsightCategory, EffortClass } from '../types';
+import type { RecurrenceChain } from '../types';
 import { CategoryEffortFilter } from './CategoryEffortFilter';
+import { useCategoryEffortFilter } from '../hooks/useCategoryEffortFilter';
 
 interface Props {
   chains: RecurrenceChain[];
 }
 
 export function RecurrenceChains({ chains }: Props) {
-  const [selectedCategories, setSelectedCategories] = useState<InsightCategory[]>([]);
-  const [selectedEfforts, setSelectedEfforts] = useState<EffortClass[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-
-  const toggleCategory = (category: InsightCategory) => {
-    setSelectedCategories((prev) =>
-      prev.includes(category) ? prev.filter((c) => c !== category) : [...prev, category],
-    );
-  };
-
-  const toggleEffort = (effort: EffortClass) => {
-    setSelectedEfforts((prev) =>
-      prev.includes(effort) ? prev.filter((e) => e !== effort) : [...prev, effort],
-    );
-  };
+  const { selectedCategories, selectedEfforts, toggleCategory, toggleEffort } =
+    useCategoryEffortFilter();
 
   if (chains.length === 0) {
     return <div className="empty-state">No recurring patterns found.</div>;
