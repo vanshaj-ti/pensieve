@@ -131,6 +131,7 @@ export interface SessionRun {
   label: string;
   insightCount: number;
   latestAt: string;
+  derivedInsightCount: number;
 }
 
 export type AnalyzeJobStatus = 'queued' | 'running' | 'done' | 'failed';
