@@ -4,6 +4,7 @@ import { SessionsPage } from './pages/SessionsPage';
 import { SessionDetailPage } from './pages/SessionDetailPage';
 import { BriefsPage } from './pages/BriefsPage';
 import { BriefDetailPage } from './pages/BriefDetailPage';
+import { GlobalSearch } from './components/GlobalSearch';
 import type { AnalyticsFilter } from './types';
 
 function routeToFilter(route: Route): AnalyticsFilter {
@@ -183,6 +184,7 @@ export function App() {
             Briefs
           </button>
         </nav>
+        <GlobalSearch onNavigate={setRoute} />
       </header>
 
       <nav className="breadcrumb">

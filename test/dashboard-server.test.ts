@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type Database from 'better-sqlite3';
 import { openDb } from '../src/db/schema.js';
@@ -914,6 +914,76 @@ describe('dashboard server', () => {
       );
       const jobAfter = await restartRes.json();
       expect(jobAfter.status).toBe(jobBefore.status);
+    });
+  });
+
+  describe('GET /api/search', () => {
+    it('matches project by substring', async () => {
+      const res = await fetch(`http://localhost:${port}/api/search?q=project-a`);
+      expect(res.status).toBe(200);
+      const results = await res.json();
+      expect(results).toHaveLength(1);
+      expect(results[0].type).toBe('project');
+      expect(results[0].projectDir).toBe('/project-a');
+      expect(results[0].text).toBe('/project-a');
+    });
+
+    it('matches session by substring', async () => {
+      const res = await fetch(`http://localhost:${port}/api/search?q=session-2`);
+      expect(res.status).toBe(200);
+      const results = await res.json();
+      expect(results.some((r: any) => r.type === 'session' && r.sessionId === 'session-2')).toBe(
+        true,
+      );
+    });
+
+    it('matches insight by text', async () => {
+      const res = await fetch(`http://localhost:${port}/api/search?q=Insight%20A`);
+      expect(res.status).toBe(200);
+      const results = await res.json();
+      expect(results.some((r: any) => r.type === 'insight' && r.text === 'Insight A')).toBe(true);
+    });
+
+    it('returns empty array for empty query', async () => {
+      const res = await fetch(`http://localhost:${port}/api/search?q=`);
+      expect(res.status).toBe(200);
+      const results = await res.json();
+      expect(results).toEqual([]);
+    });
+
+    it('returns empty array for whitespace-only query', async () => {
+      const res = await fetch(`http://localhost:${port}/api/search?q=%20%20`);
+      expect(res.status).toBe(200);
+      const results = await res.json();
+      expect(results).toEqual([]);
+    });
+
+    it('respects limit parameter', async () => {
+      const res = await fetch(`http://localhost:${port}/api/search?q=Insight&limit=2`);
+      expect(res.status).toBe(200);
+      const results = await res.json();
+      expect(results.length).toBeLessThanOrEqual(2);
+    });
+
+    it('caps limit at 20', async () => {
+      const res = await fetch(`http://localhost:${port}/api/search?q=Insight&limit=100`);
+      expect(res.status).toBe(200);
+      const results = await res.json();
+      expect(results.length).toBeLessThanOrEqual(20);
+    });
+
+    it('returns empty array for no matches', async () => {
+      const res = await fetch(`http://localhost:${port}/api/search?q=nonexistent`);
+      expect(res.status).toBe(200);
+      const results = await res.json();
+      expect(results).toEqual([]);
+    });
+
+    it('rejects invalid limit parameter', async () => {
+      const res = await fetch(`http://localhost:${port}/api/search?q=test&limit=invalid`);
+      expect(res.status).toBe(400);
+      const data = await res.json();
+      expect(data.error).toBeDefined();
     });
   });
 });

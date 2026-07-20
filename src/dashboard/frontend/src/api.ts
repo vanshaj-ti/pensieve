@@ -19,6 +19,7 @@ import type {
   TopInsight,
   BriefListResponse,
   BriefDetailResponse,
+  SearchResult,
 } from './types';
 
 async function fetchJson<T>(url: string, label: string): Promise<T> {
@@ -115,6 +116,9 @@ export const fetchEffortByCategory = (range: DateRange | string, filter: Analyti
   );
 
 export const fetchLabels = () => fetchJson<LabelSummary[]>('/api/labels', 'labels');
+
+export const fetchSearch = (q: string, limit = 20) =>
+  fetchJson<SearchResult[]>(`/api/search${buildQuery({ q, limit })}`, 'search');
 
 export const fetchProjects = () => fetchJson<ProjectSummary[]>('/api/projects', 'projects');
 
