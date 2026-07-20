@@ -16,6 +16,7 @@ describe('pipeline', () => {
   let db: Database.Database;
 
   beforeEach(() => {
+    vi.clearAllMocks();
     tempDir = mkdtempSync('pensieve-test-');
     db = openDb(join(tempDir, 'test.db'));
   });
@@ -262,7 +263,7 @@ describe('pipeline', () => {
     expect(cursor).toBe(0);
   });
 
-  it('dry-run skips persistence and cursor advancement', async () => {
+  it('dry-run skips extraction and persistence but reports episodes', async () => {
     // Pre-populate sessions table
     db.prepare(
       `
@@ -288,31 +289,19 @@ describe('pipeline', () => {
       maxLineNumber: 100,
     };
 
-    const insights: Insight[] = [
-      {
-        episodeId: 0, // Maps to the first (and only) episode in this day
-        category: 'friction_audit',
-        text: 'Dry run insight',
-        evidenceRef: 'test',
-        significanceScore: 0.5,
-        verifiedByGit: null,
-        recurrenceOf: null,
-        createdAt: now,
-      },
-    ];
-
     const { scanNewLines } = await import('../src/ingest/index.js');
     const { runExtraction } = await import('../src/extract/index.js');
 
     vi.mocked(scanNewLines).mockResolvedValueOnce([scanResult]);
-    vi.mocked(runExtraction).mockResolvedValueOnce(insights);
 
     const result = await runDailyAnalysis({
       db,
       dryRun: true,
     });
 
-    expect(result.insightsPersisted).toBe(1);
+    expect(result.episodesFound).toBe(1);
+    expect(result.insightsPersisted).toBe(0);
+    expect(vi.mocked(runExtraction)).not.toHaveBeenCalled();
 
     // Cursor should NOT advance
     const cursor = getCursor(db, '/tmp/project', 'session-1');
