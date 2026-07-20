@@ -199,7 +199,7 @@ function ProjectSessions({
 
         {error && <div className="error-banner">Failed to load sessions: {error}</div>}
 
-        {sessions === null && <div className="loading-state">Loading…</div>}
+        {!error && sessions === null && <div className="loading-state">Loading…</div>}
 
         {sessions && sessions.length === 0 && (
           <div className="empty-state">
