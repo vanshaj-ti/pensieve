@@ -35,6 +35,7 @@ export interface PipelineResult {
   sessionsFailed: number;
   insightsPersisted: number;
   datesTouched: string[];
+  label: string;
 }
 
 export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<PipelineResult> {
@@ -68,6 +69,7 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
     sessionsFailed: 0,
     insightsPersisted: 0,
     datesTouched: [],
+    label,
   };
 
   for (const scanResult of scanResults) {
