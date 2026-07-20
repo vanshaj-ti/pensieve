@@ -74,9 +74,10 @@ export async function runAnalyzeCommand(opts: AnalyzeCommandOptions): Promise<vo
 
     if (opts.dryRun) {
       const wouldWrite = Array.from(briefDates).sort().join(', ');
+      const pluralEpisode = result.episodesFound === 1 ? 'episode' : 'episodes';
       console.log(
-        `[dry-run] Processed ${result.sessionsProcessed} ${pluralSession}, ` +
-          `${result.insightsPersisted} ${pluralInsight}, ` +
+        `[dry-run] Would process ${result.sessionsProcessed} ${pluralSession} ` +
+          `covering ${result.episodesFound} ${pluralEpisode}, insights not computed in dry-run mode; ` +
           `would write brief(s) for: ${wouldWrite}`,
       );
     } else if (briefPaths.length > 0) {

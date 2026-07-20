@@ -17,7 +17,9 @@ describe('CLI command function (direct invocation)', () => {
       sessionsProcessed: 0,
       sessionsFailed: 0,
       insightsPersisted: 0,
+      episodesFound: 0,
       datesTouched: [],
+      label: 'run-test',
     });
 
     vi.mocked(writeBrief).mockReturnValue({
@@ -43,12 +45,20 @@ describe('CLI command function (direct invocation)', () => {
       sessionsProcessed: 1,
       sessionsFailed: 0,
       insightsPersisted: 0,
+      episodesFound: 3,
       datesTouched: ['2026-07-15'],
+      label: 'run-test',
     });
+
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
     await runAnalyzeCommand({ dryRun: true });
 
     expect(vi.mocked(writeBrief)).not.toHaveBeenCalled();
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringContaining('insights not computed in dry-run mode'),
+    );
+    logSpy.mockRestore();
   });
 
   it('--date writes brief only for specified date, not datesTouched', async () => {
@@ -60,7 +70,9 @@ describe('CLI command function (direct invocation)', () => {
       sessionsProcessed: 1,
       sessionsFailed: 0,
       insightsPersisted: 1,
+      episodesFound: 1,
       datesTouched: ['2026-07-15', '2026-07-16'],
+      label: 'run-test',
     });
 
     vi.mocked(writeBrief).mockReturnValue({
@@ -87,7 +99,9 @@ describe('CLI command function (direct invocation)', () => {
       sessionsProcessed: 2,
       sessionsFailed: 0,
       insightsPersisted: 2,
+      episodesFound: 2,
       datesTouched: ['2026-07-13', '2026-07-14'],
+      label: 'run-test',
     });
 
     vi.mocked(writeBrief).mockReturnValue({
