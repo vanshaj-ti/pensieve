@@ -140,3 +140,12 @@ export interface AnalyzeJob {
   insightsPersisted?: number;
   error?: string;
 }
+
+export interface BriefListResponse {
+  dates: string[];
+}
+
+export interface BriefDetailResponse {
+  date: string;
+  content: string;
+}

@@ -15,6 +15,8 @@ import type {
   SessionRun,
   SessionSummary,
   TopInsight,
+  BriefListResponse,
+  BriefDetailResponse,
 } from './types';
 
 async function fetchJson<T>(url: string, label: string): Promise<T> {
@@ -184,3 +186,9 @@ export async function postLabel(
   }
   return res.json();
 }
+
+export const fetchBriefDates = () =>
+  fetchJson<BriefListResponse>('/api/briefs', 'brief dates').then((r) => r.dates);
+
+export const fetchBrief = (date: string) =>
+  fetchJson<BriefDetailResponse>(`/api/briefs/${encodeURIComponent(date)}`, 'brief');

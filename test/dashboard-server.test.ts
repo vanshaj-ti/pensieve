@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type Database from 'better-sqlite3';
 import { openDb } from '../src/db/schema.js';
@@ -524,6 +524,64 @@ describe('dashboard server', () => {
       }
       expect(job.status).toBe('done');
       expect(job.insightsDerived).toBe(0);
+    });
+  });
+
+  describe('GET /api/briefs', () => {
+    it('returns empty list when briefs dir is empty', async () => {
+      const res = await fetch(`http://localhost:${port}/api/briefs`);
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.dates).toEqual([]);
+    });
+
+    it('returns sorted dates in descending order', async () => {
+      writeFileSync(join(tempDir, '2026-07-14.md'), '# Brief 1');
+      writeFileSync(join(tempDir, '2026-07-16.md'), '# Brief 3');
+      writeFileSync(join(tempDir, '2026-07-15.md'), '# Brief 2');
+
+      const res = await fetch(`http://localhost:${port}/api/briefs`);
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.dates).toEqual(['2026-07-16', '2026-07-15', '2026-07-14']);
+    });
+
+    it('ignores non-.md files', async () => {
+      writeFileSync(join(tempDir, '2026-07-14.md'), '# Brief');
+      writeFileSync(join(tempDir, '2026-07-14.txt'), 'Not a brief');
+
+      const res = await fetch(`http://localhost:${port}/api/briefs`);
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.dates).toEqual(['2026-07-14']);
+    });
+  });
+
+  describe('GET /api/briefs/:date', () => {
+    it('returns brief content for valid date', async () => {
+      const briefContent = '# Daily Brief\nSome insights here.';
+      writeFileSync(join(tempDir, '2026-07-14.md'), briefContent);
+
+      const res = await fetch(`http://localhost:${port}/api/briefs/2026-07-14`);
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.date).toBe('2026-07-14');
+      expect(data.content).toBe(briefContent);
+    });
+
+    it('returns 404 when brief does not exist', async () => {
+      const res = await fetch(`http://localhost:${port}/api/briefs/2026-07-14`);
+      expect(res.status).toBe(404);
+    });
+
+    it('rejects invalid date format', async () => {
+      const res = await fetch(`http://localhost:${port}/api/briefs/not-a-date`);
+      expect(res.status).toBe(400);
+    });
+
+    it('rejects date with path traversal characters after decoding', async () => {
+      const res = await fetch(`http://localhost:${port}/api/briefs/..%2Fevil`);
+      expect(res.status).toBe(400);
     });
   });
 });
