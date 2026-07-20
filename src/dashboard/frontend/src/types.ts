@@ -9,6 +9,8 @@ export type InsightCategory =
 
 export type EffortClass = 'toil' | 'judgment' | 'overhead';
 
+export type DateRange = { date: string } | { fromDate: string; toDate: string };
+
 export type DerivedInsightType = 'struggle' | 'win' | 'learning' | 'idea' | 'risk';
 
 export interface DerivedInsight {
