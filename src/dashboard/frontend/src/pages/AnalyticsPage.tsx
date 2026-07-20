@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Route } from '../hooks/useRoute';
 import type {
   AnalyticsFilter,
@@ -34,7 +34,7 @@ interface Props {
   route: Route;
 }
 
-const FULL_INSIGHTS_LIMIT = 1000;
+const INSIGHTS_PAGE_SIZE = 20;
 const TREND_DAYS = 30;
 
 export function AnalyticsPage({ filter, scopeLabel, route }: Props) {
@@ -42,12 +42,16 @@ export function AnalyticsPage({ filter, scopeLabel, route }: Props) {
   const [dates, setDates] = useState<string[]>([]);
   const [categoryTrend, setCategoryTrend] = useState<CategoryTrendPoint[]>([]);
   const [topInsights, setTopInsights] = useState<TopInsight[]>([]);
+  const [insightsPage, setInsightsPage] = useState(1);
+  const [insightsTotal, setInsightsTotal] = useState(0);
+  const [insightsTotalPages, setInsightsTotalPages] = useState(1);
   const [recurrenceChains, setRecurrenceChains] = useState<RecurrenceChain[]>([]);
   const [crossProject, setCrossProject] = useState<ProjectRollupType[]>([]);
   const [effortBreakdown, setEffortBreakdown] = useState<EffortBreakdown | null>(null);
   const [effortTrend, setEffortTrend] = useState<EffortBreakdownTrendPoint[]>([]);
   const [effortByCategory, setEffortByCategory] = useState<EffortByCategoryPoint[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const reloadAbortRef = useRef<AbortController | null>(null);
 
   const filterKey = JSON.stringify(filter);
 
@@ -58,6 +62,7 @@ export function AnalyticsPage({ filter, scopeLabel, route }: Props) {
         if (cancelled) return;
         setDates(d);
         setDate((prev) => (prev && d.includes(prev) ? prev : (d[0] ?? null)));
+        setInsightsPage(1);
       })
       .catch((err) => !cancelled && setError(err.message));
     return () => {
@@ -72,9 +77,13 @@ export function AnalyticsPage({ filter, scopeLabel, route }: Props) {
   const reload = useCallback(() => {
     if (!date) return;
     setError(null);
+    const currentPage = insightsPage;
+    reloadAbortRef.current?.abort();
+    const abortController = new AbortController();
+    reloadAbortRef.current = abortController;
     Promise.all([
       fetchCategoryTrend(TREND_DAYS, filter),
-      fetchTopInsights(date, FULL_INSIGHTS_LIMIT, filter),
+      fetchTopInsights(date, INSIGHTS_PAGE_SIZE, (insightsPage - 1) * INSIGHTS_PAGE_SIZE, filter),
       fetchRecurrenceChains(TREND_DAYS, filter),
       fetchCrossProject(date, filter),
       fetchEffortBreakdown(date, filter),
@@ -91,8 +100,12 @@ export function AnalyticsPage({ filter, scopeLabel, route }: Props) {
           effortTrendRes,
           effortByCategoryRes,
         ]) => {
+          if (abortController.signal.aborted) return;
+          if (currentPage !== insightsPage) return;
           setCategoryTrend(categoryTrendRes);
-          setTopInsights(topInsightsRes);
+          setTopInsights(topInsightsRes.insights);
+          setInsightsTotal(topInsightsRes.total);
+          setInsightsTotalPages(topInsightsRes.totalPages);
           setRecurrenceChains(recurrenceChainsRes);
           setCrossProject(crossProjectRes);
           setEffortBreakdown(effortBreakdownRes);
@@ -100,13 +113,22 @@ export function AnalyticsPage({ filter, scopeLabel, route }: Props) {
           setEffortByCategory(effortByCategoryRes);
         },
       )
-      .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load data'));
+      .catch((err) => {
+        if (abortController.signal.aborted) return;
+        setError(err instanceof Error ? err.message : 'Failed to load data');
+      });
     // Same filterKey rationale as above.
-  }, [date, filterKey]);
+  }, [date, filterKey, insightsPage]);
 
   useEffect(() => {
     reload();
   }, [reload]);
+
+  useEffect(() => {
+    return () => {
+      reloadAbortRef.current?.abort();
+    };
+  }, []);
 
   if (error) {
     return <div className="error-banner">Failed to load dashboard: {error}</div>;
@@ -158,6 +180,27 @@ export function AnalyticsPage({ filter, scopeLabel, route }: Props) {
         <section className="card span-full">
           <h2>All Insights</h2>
           <InsightList insights={topInsights} onLabelSaved={reload} />
+          {insightsTotalPages > 1 && (
+            <div className="badge-row" style={{ justifyContent: 'center', gap: 12, marginTop: 16 }}>
+              <button
+                className="btn"
+                disabled={insightsPage <= 1}
+                onClick={() => setInsightsPage((p) => p - 1)}
+              >
+                ← Prev
+              </button>
+              <span className="insight-meta">
+                Page {insightsPage} of {insightsTotalPages} ({insightsTotal} insights)
+              </span>
+              <button
+                className="btn"
+                disabled={insightsPage >= insightsTotalPages}
+                onClick={() => setInsightsPage((p) => p + 1)}
+              >
+                Next →
+              </button>
+            </div>
+          )}
         </section>
 
         <section className="card span-full">
