@@ -384,7 +384,7 @@ describe('Extract: Sonnet Pass', () => {
     vi.clearAllMocks();
   });
 
-  it('Case 3: Sonnet prompt includes candidates and recent history', async () => {
+  it('Case 3: Sonnet prompt includes candidates in user message, history in cached system blocks', async () => {
     const candidates: CandidateWithSource[] = [
       {
         episodeId: 1,
@@ -434,14 +434,28 @@ describe('Extract: Sonnet Pass', () => {
     await verifyAndScore(candidates, history, client);
 
     const call = mockCreate.mock.calls[0][0];
+    const systemBlocks = call.system;
+    const systemText = systemBlocks.map((b: any) => b.text).join('\n');
     const userMessage = call.messages[0].content;
+
+    expect(systemBlocks).toHaveLength(2);
+    expect(systemBlocks[0]).toMatchObject({
+      type: 'text',
+      cache_control: { type: 'ephemeral' },
+    });
+    expect(systemBlocks[1]).toMatchObject({
+      type: 'text',
+      cache_control: { type: 'ephemeral' },
+    });
+
+    expect(systemText).toContain('Previous insight');
     expect(userMessage).toContain('Candidate 1');
     expect(userMessage).toContain('Candidate 2');
-    expect(userMessage).toContain('Previous insight');
+    expect(userMessage).not.toContain('Previous insight');
     expect(call.temperature).toBeUndefined();
   });
 
-  it('Case 4: Sonnet response parsing with recurrence field', async () => {
+  it('Case 4: Sonnet response parsing always forces recurrenceOf to null, even if Sonnet emits a value', async () => {
     const candidates: CandidateWithSource[] = [
       {
         episodeId: 1,
@@ -492,7 +506,7 @@ describe('Extract: Sonnet Pass', () => {
       episodeId: 1,
       category: 'architecture_decisions',
       text: 'Polished insight',
-      recurrenceOf: 100,
+      recurrenceOf: null,
       verifiedByGit: null,
     });
     expect(result[1]).toMatchObject({
@@ -954,5 +968,93 @@ describe('Extract: Orchestration', () => {
     expect(sonnetCallCount).toBe(3); // ceil(90 / 40) = 3 batches
     expect(sonnetBatchSizes).toEqual([40, 40, 10]);
     expect(result).toHaveLength(candidateCount);
+  });
+
+  it('Case 10: one failed Sonnet batch does not take down other batches in the same run', async () => {
+    // 90 candidates split into 3 Sonnet batches. First batch fails, second and
+    // third succeed. The full run should complete and return only insights
+    // from successful batches (not throw, not abort siblings).
+    const candidateCount = 90;
+    const episodes: PersistedEpisode[] = [
+      {
+        id: 1,
+        date: '2026-07-15',
+        projectDir: '/project',
+        sessionId: 'sess-1',
+        startLine: 1,
+        endLine: 1,
+        lines: [
+          {
+            lineNumber: 1,
+            type: 'user',
+            timestamp: '2026-07-15T10:00:00Z',
+            hasToolUse: false,
+            raw: {
+              type: 'user',
+              timestamp: '2026-07-15T10:00:00Z',
+              message: { content: 'test' },
+            },
+          },
+        ],
+      },
+    ];
+
+    mockCreate.mockImplementationOnce(async () => ({
+      content: [
+        {
+          type: 'tool_use',
+          name: 'emit_candidates',
+          input: {
+            candidates: Array.from({ length: candidateCount }, (_, i) => ({
+              category: 'mechanical_labor',
+              text: `Candidate ${i}`,
+              evidenceRef: `line:${i}`,
+              evidenceSnippet: 'test',
+            })),
+          },
+        },
+      ],
+    }));
+
+    let sonnetCallCount = 0;
+    mockCreate.mockImplementation(async (args: { tools?: Array<{ name: string }> }) => {
+      if (args.tools?.[0]?.name === 'emit_candidates') {
+        throw new Error('Unexpected second Haiku call');
+      }
+      sonnetCallCount++;
+      if (sonnetCallCount === 1) {
+        // First Sonnet batch fails
+        throw new Error('boom');
+      }
+      // Second and third Sonnet batches succeed
+      return {
+        content: [
+          {
+            type: 'tool_use',
+            name: 'emit_insights',
+            input: {
+              insights: [
+                {
+                  episodeId: 1,
+                  category: 'mechanical_labor',
+                  text: `Insight from batch ${sonnetCallCount}`,
+                  evidenceRef: `line:${sonnetCallCount}`,
+                  significanceScore: 3,
+                  effortClass: 'toil',
+                  recurrenceOf: null,
+                },
+              ],
+            },
+          },
+        ],
+      };
+    });
+
+    const result = await runExtraction(episodes, db, client);
+
+    expect(sonnetCallCount).toBe(3); // All three batches were attempted
+    expect(result).toHaveLength(2); // Only insights from batches 2 and 3, batch 1 failed and contributed []
+    expect(result[0].text).toContain('Insight from batch 2');
+    expect(result[1].text).toContain('Insight from batch 3');
   });
 });
