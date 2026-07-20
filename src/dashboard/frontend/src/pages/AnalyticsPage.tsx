@@ -156,7 +156,11 @@ export function AnalyticsPage({ filter, scopeLabel, route }: Props) {
   }
 
   if (!effortBreakdown) {
-    return null;
+    return (
+      <div className="loading-state" style={{ gridColumn: '1 / -1' }}>
+        Loading…
+      </div>
+    );
   }
 
   const isHolistic = route.kind === 'holistic';

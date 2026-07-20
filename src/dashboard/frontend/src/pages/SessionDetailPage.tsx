@@ -73,7 +73,7 @@ export function SessionDetailPage({ projectDir, sessionId, onNavigate }: Props) 
   }
 
   if (!runs) {
-    return null;
+    return <div className="loading-state">Loading…</div>;
   }
 
   return (
