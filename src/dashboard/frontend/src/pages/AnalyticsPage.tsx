@@ -37,6 +37,13 @@ interface Props {
 const FULL_INSIGHTS_LIMIT = 1000;
 const TREND_DAYS = 30;
 
+function daysSinceDate(dateStr: string): number {
+  const today = new Date();
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const diffMs = Date.parse(`${todayKey}T00:00:00`) - Date.parse(`${dateStr}T00:00:00`);
+  return Math.max(1, Math.round(diffMs / 86400000) + 1);
+}
+
 export function AnalyticsPage({ filter, scopeLabel, route }: Props) {
   const [date, setDate] = useState<string | null>(null);
   const [dates, setDates] = useState<string[]>([]);
@@ -69,16 +76,22 @@ export function AnalyticsPage({ filter, scopeLabel, route }: Props) {
     // the route in App.tsx).
   }, [filterKey]);
 
+  const isScopedToSession = route.kind === 'session' || route.kind === 'session-run';
+  const trendDays =
+    isScopedToSession && dates.length > 0
+      ? Math.min(TREND_DAYS, daysSinceDate(dates[dates.length - 1]))
+      : TREND_DAYS;
+
   const reload = useCallback(() => {
     if (!date) return;
     setError(null);
     Promise.all([
-      fetchCategoryTrend(TREND_DAYS, filter),
+      fetchCategoryTrend(trendDays, filter),
       fetchTopInsights(date, FULL_INSIGHTS_LIMIT, filter),
-      fetchRecurrenceChains(TREND_DAYS, filter),
+      fetchRecurrenceChains(trendDays, filter),
       fetchCrossProject(date, filter),
       fetchEffortBreakdown(date, filter),
-      fetchEffortBreakdownTrend(TREND_DAYS, filter),
+      fetchEffortBreakdownTrend(trendDays, filter),
       fetchEffortByCategory(date, filter),
     ])
       .then(
@@ -101,8 +114,8 @@ export function AnalyticsPage({ filter, scopeLabel, route }: Props) {
         },
       )
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load data'));
-    // Same filterKey rationale as above.
-  }, [date, filterKey]);
+    // Same filterKey rationale as above; trendDays is derived from dates which changes with filterKey.
+  }, [date, filterKey, trendDays]);
 
   useEffect(() => {
     reload();
@@ -142,7 +155,9 @@ export function AnalyticsPage({ filter, scopeLabel, route }: Props) {
         <section className="card">
           <h2>
             Toil Over Time
-            <span className="card-hint">last {TREND_DAYS} days</span>
+            <span className="card-hint">
+              last {trendDays} day{trendDays === 1 ? '' : 's'}
+            </span>
           </h2>
           <EffortTrendChart data={effortTrend} />
         </section>
@@ -150,7 +165,9 @@ export function AnalyticsPage({ filter, scopeLabel, route }: Props) {
         <section className="card span-full">
           <h2>
             Category Trend
-            <span className="card-hint">last {TREND_DAYS} days</span>
+            <span className="card-hint">
+              last {trendDays} day{trendDays === 1 ? '' : 's'}
+            </span>
           </h2>
           <CategoryTrendChart data={categoryTrend} />
         </section>
