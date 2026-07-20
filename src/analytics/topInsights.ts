@@ -13,6 +13,7 @@ export function getTopInsights(
   date: string,
   limit: number,
   filter?: AnalyticsFilter,
+  offset: number = 0,
 ): TopInsight[] {
   const { sql: filterSql, params: filterParams } = buildFilterClause(filter);
 
@@ -28,9 +29,10 @@ export function getTopInsights(
     WHERE e.date = ?${filterSql}
     ORDER BY i.significance_score DESC
     LIMIT ?
+    OFFSET ?
   `,
     )
-    .all(date, ...filterParams, limit) as Array<{
+    .all(date, ...filterParams, limit, offset) as Array<{
     id: number;
     episode_id: number;
     category: string;
@@ -66,4 +68,24 @@ export function getTopInsights(
       label: row.label,
     };
   });
+}
+
+export function getTopInsightsCount(
+  db: Database.Database,
+  date: string,
+  filter?: AnalyticsFilter,
+): number {
+  const { sql: filterSql, params: filterParams } = buildFilterClause(filter);
+
+  const row = db
+    .prepare(
+      `
+    SELECT COUNT(*) as count FROM insights i
+    JOIN episodes e ON i.episode_id = e.id
+    WHERE e.date = ?${filterSql}
+  `,
+    )
+    .get(date, ...filterParams) as { count: number };
+
+  return row.count;
 }

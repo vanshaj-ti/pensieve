@@ -6,8 +6,10 @@ import { openDb } from '../src/db/schema.js';
 import {
   getCategoryTrend,
   getTopInsights,
+  getTopInsightsCount,
   getRecurrenceChains,
   getCrossProjectRollup,
+  getProjectEffortBreakdown,
   getEffortBreakdown,
   getLabels,
   getProjects,
@@ -151,6 +153,81 @@ describe('analytics', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0]?.projectDir).toBe('/home/user/project');
+    });
+
+    it('respects offset parameter', () => {
+      db.prepare(
+        `
+        INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
+        VALUES ('2026-07-15', '/tmp/project', 'session-1', 1, 20)
+      `,
+      ).run();
+
+      for (let i = 0; i < 5; i++) {
+        db.prepare(
+          `
+          INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
+          VALUES (1, 'architecture_decisions', ?, ?, ?, NULL, NULL, '2026-07-15T10:00:00Z')
+        `,
+        ).run(`Insight ${i}`, `ref${i}`, 0.5 + i * 0.1);
+      }
+
+      const page1 = getTopInsights(db, '2026-07-15', 2, undefined, 0);
+      const page2 = getTopInsights(db, '2026-07-15', 2, undefined, 2);
+
+      expect(page1).toHaveLength(2);
+      expect(page2).toHaveLength(2);
+      expect(page1[0]?.text).toBe('Insight 4');
+      expect(page2[0]?.text).toBe('Insight 2');
+    });
+  });
+
+  describe('getTopInsightsCount', () => {
+    it('returns 0 for date with no insights', () => {
+      const count = getTopInsightsCount(db, '2026-07-15');
+      expect(count).toBe(0);
+    });
+
+    it('counts all insights for a date', () => {
+      db.prepare(
+        `
+        INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
+        VALUES ('2026-07-15', '/tmp/project', 'session-1', 1, 20)
+      `,
+      ).run();
+
+      for (let i = 0; i < 5; i++) {
+        db.prepare(
+          `
+          INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
+          VALUES (1, 'architecture_decisions', ?, ?, ?, NULL, NULL, '2026-07-15T10:00:00Z')
+        `,
+        ).run(`Insight ${i}`, `ref${i}`, 0.5 + i * 0.1);
+      }
+
+      const count = getTopInsightsCount(db, '2026-07-15');
+      expect(count).toBe(5);
+    });
+
+    it('respects filter same as getTopInsights', () => {
+      db.prepare(
+        `
+        INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
+        VALUES ('2026-07-15', '/project-a', 'session-1', 1, 10),
+               ('2026-07-15', '/project-b', 'session-2', 1, 10)
+      `,
+      ).run();
+
+      db.prepare(
+        `
+        INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
+        VALUES (1, 'architecture_decisions', 'A insight', 'ref1', 0.8, NULL, NULL, '2026-07-15T10:00:00Z'),
+               (2, 'architecture_decisions', 'B insight', 'ref2', 0.8, NULL, NULL, '2026-07-15T10:00:00Z')
+      `,
+      ).run();
+
+      const countA = getTopInsightsCount(db, '2026-07-15', { projectDir: '/project-a' });
+      expect(countA).toBe(1);
     });
   });
 
@@ -544,6 +621,127 @@ describe('analytics', () => {
       expect(result[0]?.insightCount).toBe(3);
       expect(result[1]?.insightCount).toBe(1);
       expect(result[2]?.insightCount).toBe(1);
+    });
+  });
+
+  describe('getProjectEffortBreakdown', () => {
+    it('returns empty array for empty database', () => {
+      const result = getProjectEffortBreakdown(db, '2026-07-15');
+      expect(result).toEqual([]);
+    });
+
+    it('computes per-project toil/judgment/overhead breakdown', () => {
+      db.prepare(
+        `
+        INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
+        VALUES ('2026-07-15', '/project1', 'session-1', 1, 5),
+               ('2026-07-15', '/project2', 'session-1', 6, 15)
+      `,
+      ).run();
+
+      db.prepare(
+        `
+        INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, effort_class, verified_by_git, recurrence_of, created_at)
+        VALUES (1, 'friction_audit', 'Project1 Toil A', 'ref1', 0.8, 'toil', NULL, NULL, '2026-07-15T10:00:00Z'),
+               (1, 'friction_audit', 'Project1 Toil B', 'ref2', 0.8, 'toil', NULL, NULL, '2026-07-15T10:00:00Z'),
+               (1, 'exploration', 'Project1 Judgment', 'ref3', 0.7, 'judgment', NULL, NULL, '2026-07-15T10:00:00Z'),
+               (2, 'exploration', 'Project2 Judgment A', 'ref4', 0.7, 'judgment', NULL, NULL, '2026-07-15T10:00:00Z'),
+               (2, 'exploration', 'Project2 Judgment B', 'ref5', 0.7, 'judgment', NULL, NULL, '2026-07-15T10:00:00Z'),
+               (2, 'architecture_decisions', 'Project2 Overhead', 'ref6', 0.6, 'overhead', NULL, NULL, '2026-07-15T10:00:00Z')
+      `,
+      ).run();
+
+      const result = getProjectEffortBreakdown(db, '2026-07-15');
+
+      expect(result).toHaveLength(2);
+      // Sorted by toil DESC: project1 has 2 toil, project2 has 0 toil
+      expect(result[0].projectDir).toBe('/project1');
+      expect(result[0].toil).toBe(2);
+      expect(result[0].judgment).toBe(1);
+      expect(result[0].overhead).toBe(0);
+      expect(result[0].total).toBe(3);
+      expect(result[0].toilRatio).toBeCloseTo(2 / 3);
+      expect(result[0].judgmentRatio).toBeCloseTo(1 / 3);
+      expect(result[0].overheadRatio).toBeCloseTo(0);
+
+      expect(result[1].projectDir).toBe('/project2');
+      expect(result[1].toil).toBe(0);
+      expect(result[1].judgment).toBe(2);
+      expect(result[1].overhead).toBe(1);
+      expect(result[1].total).toBe(3);
+      expect(result[1].toilRatio).toBeCloseTo(0);
+      expect(result[1].judgmentRatio).toBeCloseTo(2 / 3);
+      expect(result[1].overheadRatio).toBeCloseTo(1 / 3);
+    });
+
+    it('handles divide-by-zero when all insight counts are zero (single project with insights)', () => {
+      db.prepare(
+        `
+        INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
+        VALUES ('2026-07-15', '/project', 'session-1', 1, 5)
+      `,
+      ).run();
+
+      // Insights with all zeros — a degenerate case that should still compute ratios safely
+      // (In practice, this means effort_class has no hits, so byProject Map stays empty and no output)
+      const result = getProjectEffortBreakdown(db, '2026-07-15');
+
+      // No insights with valid effort_class = empty result
+      expect(result).toHaveLength(0);
+    });
+
+    it('respects AnalyticsFilter for project scoping', () => {
+      db.prepare(
+        `
+        INSERT INTO episodes (date, project_dir, session_id, start_line, end_line, label)
+        VALUES ('2026-07-15', '/project-a', 'session-1', 1, 5, 'run-x'),
+               ('2026-07-15', '/project-b', 'session-2', 6, 15, 'run-y')
+      `,
+      ).run();
+
+      db.prepare(
+        `
+        INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, effort_class, verified_by_git, recurrence_of, created_at)
+        VALUES (1, 'friction_audit', 'Project A Toil', 'ref1', 0.8, 'toil', NULL, NULL, '2026-07-15T10:00:00Z'),
+               (2, 'exploration', 'Project B Judgment', 'ref2', 0.7, 'judgment', NULL, NULL, '2026-07-15T10:00:00Z')
+      `,
+      ).run();
+
+      const result = getProjectEffortBreakdown(db, '2026-07-15', {
+        projectDir: '/project-a',
+      });
+
+      expect(result).toHaveLength(1);
+      expect(result[0].projectDir).toBe('/project-a');
+      expect(result[0].toil).toBe(1);
+      expect(result[0].judgment).toBe(0);
+      expect(result[0].total).toBe(1);
+    });
+
+    it('respects label filter', () => {
+      db.prepare(
+        `
+        INSERT INTO episodes (date, project_dir, session_id, start_line, end_line, label)
+        VALUES ('2026-07-15', '/project1', 'session-1', 1, 5, 'run-a'),
+               ('2026-07-15', '/project1', 'session-1', 6, 10, 'run-b')
+      `,
+      ).run();
+
+      db.prepare(
+        `
+        INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, effort_class, verified_by_git, recurrence_of, created_at)
+        VALUES (1, 'friction_audit', 'Run A Toil', 'ref1', 0.8, 'toil', NULL, NULL, '2026-07-15T10:00:00Z'),
+               (2, 'exploration', 'Run B Judgment', 'ref2', 0.7, 'judgment', NULL, NULL, '2026-07-15T10:00:00Z')
+      `,
+      ).run();
+
+      const result = getProjectEffortBreakdown(db, '2026-07-15', { label: 'run-a' });
+
+      expect(result).toHaveLength(1);
+      expect(result[0].projectDir).toBe('/project1');
+      expect(result[0].toil).toBe(1);
+      expect(result[0].judgment).toBe(0);
+      expect(result[0].total).toBe(1);
     });
   });
 

@@ -11,6 +11,7 @@ import {
   getInsightDates,
   getCategoryTrend,
   getTopInsights,
+  getTopInsightsCount,
   getEffortBreakdown,
   getEffortBreakdownTrend,
   getCrossProjectRollup,
@@ -121,7 +122,7 @@ describe('dashboard server', () => {
   });
 
   describe('GET /api/top-insights', () => {
-    it('returns top insights matching getTopInsights', async () => {
+    it('returns paginated top insights with correct shape', async () => {
       const date = '2026-07-15';
       const limit = 10;
       const res = await fetch(
@@ -129,8 +130,12 @@ describe('dashboard server', () => {
       );
       expect(res.status).toBe(200);
       const apiData = await res.json();
-      const expected = getTopInsights(dbForAnalytics, date, limit);
-      expect(apiData).toEqual(expected);
+      expect(apiData).toHaveProperty('insights');
+      expect(apiData).toHaveProperty('total');
+      expect(apiData).toHaveProperty('totalPages');
+      expect(apiData).toHaveProperty('limit');
+      expect(apiData).toHaveProperty('offset');
+      expect(apiData.insights).toEqual(getTopInsights(dbForAnalytics, date, limit, undefined, 0));
     });
 
     it('returns 400 for missing date', async () => {
@@ -148,6 +153,51 @@ describe('dashboard server', () => {
         `http://localhost:${port}/api/top-insights?date=2026-07-15&limit=10junk`,
       );
       expect(res.status).toBe(400);
+    });
+
+    it('respects offset parameter', async () => {
+      const date = '2026-07-15';
+      const limit = 5;
+      const page1Res = await fetch(
+        `http://localhost:${port}/api/top-insights?date=${date}&limit=${limit}&offset=0`,
+      );
+      const page2Res = await fetch(
+        `http://localhost:${port}/api/top-insights?date=${date}&limit=${limit}&offset=${limit}`,
+      );
+      expect(page1Res.status).toBe(200);
+      expect(page2Res.status).toBe(200);
+      const page1 = await page1Res.json();
+      const page2 = await page2Res.json();
+      expect(page1.insights).toEqual(getTopInsights(dbForAnalytics, date, limit, undefined, 0));
+      expect(page2.insights).toEqual(getTopInsights(dbForAnalytics, date, limit, undefined, limit));
+    });
+
+    it('returns 400 for invalid offset (negative)', async () => {
+      const res = await fetch(
+        `http://localhost:${port}/api/top-insights?date=2026-07-15&limit=10&offset=-1`,
+      );
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 400 for invalid offset (non-numeric)', async () => {
+      const res = await fetch(
+        `http://localhost:${port}/api/top-insights?date=2026-07-15&limit=10&offset=garbage`,
+      );
+      expect(res.status).toBe(400);
+    });
+
+    it('includes total and totalPages', async () => {
+      const date = '2026-07-15';
+      const limit = 5;
+      const res = await fetch(
+        `http://localhost:${port}/api/top-insights?date=${date}&limit=${limit}`,
+      );
+      expect(res.status).toBe(200);
+      const apiData = await res.json();
+      const expectedTotal = getTopInsightsCount(dbForAnalytics, date);
+      const expectedTotalPages = Math.max(1, Math.ceil(expectedTotal / limit));
+      expect(apiData.total).toBe(expectedTotal);
+      expect(apiData.totalPages).toBe(expectedTotalPages);
     });
   });
 
@@ -297,10 +347,16 @@ describe('dashboard server', () => {
       );
       expect(res.status).toBe(200);
       const apiData = await res.json();
-      const expected = getTopInsights(dbForAnalytics, '2026-07-15', 10, {
-        projectDir: '/project-b',
-      });
-      expect(apiData).toEqual(expected);
+      const expected = getTopInsights(
+        dbForAnalytics,
+        '2026-07-15',
+        10,
+        {
+          projectDir: '/project-b',
+        },
+        0,
+      );
+      expect(apiData.insights).toEqual(expected);
     });
   });
 
