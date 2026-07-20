@@ -454,6 +454,21 @@ export function createDashboardServer(config: Config): Application {
             status: 'done',
             insightsPersisted: result.insightsPersisted,
           });
+
+          // Auto-trigger derive-insights after analyze completes (fire-and-forget)
+          if (result.insightsPersisted > 0) {
+            const workItems = getWorkItemsForRun(db, projectDir, sessionId, result.label);
+            deriveSessionInsights({ projectDir, sessionId, label: result.label, workItems })
+              .then((derived) => {
+                insertDerivedInsights(db, derived);
+              })
+              .catch((err) => {
+                console.error(
+                  'Auto derive-insights failed:',
+                  err instanceof Error ? err.message : String(err),
+                );
+              });
+          }
         })
         .catch((err) => {
           analyzeJobs.set(jobId, {

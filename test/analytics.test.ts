@@ -846,8 +846,64 @@ describe('analytics', () => {
 
       const result = getSessionRuns(db, '/tmp/project', 'session-1');
       expect(result).toEqual([
-        { label: 'run-new', insightCount: 1, latestAt: '2026-07-16T10:00:00Z' },
-        { label: 'run-old', insightCount: 2, latestAt: '2026-07-15T11:00:00Z' },
+        {
+          label: 'run-new',
+          insightCount: 1,
+          latestAt: '2026-07-16T10:00:00Z',
+          derivedInsightCount: 0,
+        },
+        {
+          label: 'run-old',
+          insightCount: 2,
+          latestAt: '2026-07-15T11:00:00Z',
+          derivedInsightCount: 0,
+        },
+      ]);
+    });
+
+    it('includes derived insight counts for each label', () => {
+      db.prepare(
+        `
+        INSERT INTO episodes (date, project_dir, session_id, start_line, end_line, label)
+        VALUES
+          ('2026-07-15', '/tmp/project', 'session-1', 1, 10, 'run-old'),
+          ('2026-07-16', '/tmp/project', 'session-1', 11, 20, 'run-new')
+      `,
+      ).run();
+
+      db.prepare(
+        `
+        INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, effort_class, verified_by_git, recurrence_of, created_at)
+        VALUES
+          (1, 'architecture_decisions', 'Old run insight', 'ref1', 3, 'judgment', NULL, NULL, '2026-07-15T10:00:00Z'),
+          (2, 'architecture_decisions', 'New run insight', 'ref2', 3, 'judgment', NULL, NULL, '2026-07-16T10:00:00Z')
+      `,
+      ).run();
+
+      // Add derived insights for the 'run-old' label only
+      db.prepare(
+        `
+        INSERT INTO derived_insights (project_dir, session_id, label, insight_type, text, evidence_insight_ids, created_at)
+        VALUES
+          ('/tmp/project', 'session-1', 'run-old', 'struggle', 'Derived insight 1', '[]', '2026-07-15T10:10:00Z'),
+          ('/tmp/project', 'session-1', 'run-old', 'win', 'Derived insight 2', '[]', '2026-07-15T10:15:00Z')
+      `,
+      ).run();
+
+      const result = getSessionRuns(db, '/tmp/project', 'session-1');
+      expect(result).toEqual([
+        {
+          label: 'run-new',
+          insightCount: 1,
+          latestAt: '2026-07-16T10:00:00Z',
+          derivedInsightCount: 0,
+        },
+        {
+          label: 'run-old',
+          insightCount: 1,
+          latestAt: '2026-07-15T10:00:00Z',
+          derivedInsightCount: 2,
+        },
       ]);
     });
   });

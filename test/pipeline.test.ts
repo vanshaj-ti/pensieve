@@ -101,6 +101,30 @@ describe('pipeline', () => {
     );
   });
 
+  it('returns the label used (auto-generated when omitted)', async () => {
+    const { scanNewLines } = await import('../src/ingest/index.js');
+    vi.mocked(scanNewLines).mockResolvedValueOnce([]);
+
+    const result = await runDailyAnalysis({
+      db,
+    });
+
+    expect(result.label).toBeDefined();
+    expect(result.label).toMatch(/^run-\d{8}T\d{6}Z$/);
+  });
+
+  it('returns the label provided in options', async () => {
+    const { scanNewLines } = await import('../src/ingest/index.js');
+    vi.mocked(scanNewLines).mockResolvedValueOnce([]);
+
+    const result = await runDailyAnalysis({
+      db,
+      label: 'my-custom-label',
+    });
+
+    expect(result.label).toBe('my-custom-label');
+  });
+
   it('multi-episode day: insights correctly associated to source episodes', async () => {
     const now = new Date().toISOString();
     const scanResult: ScanResult = {
