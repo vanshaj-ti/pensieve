@@ -8,7 +8,9 @@ export type Route =
   | { kind: 'projects' }
   | { kind: 'projects-detail'; projectDir: string }
   | { kind: 'session-detail'; projectDir: string; sessionId: string }
-  | { kind: 'session-run'; projectDir: string; sessionId: string; label: string };
+  | { kind: 'session-run'; projectDir: string; sessionId: string; label: string }
+  | { kind: 'briefs' }
+  | { kind: 'brief-detail'; date: string };
 
 function parsePath(pathname: string): Route {
   const parts = pathname.split('/').filter(Boolean).map(decodeURIComponent);
@@ -42,6 +44,12 @@ function parsePath(pathname: string): Route {
   if (parts[0] === 'label' && parts[1]) {
     return { kind: 'label', label: parts[1] };
   }
+  if (parts[0] === 'briefs' && parts.length === 1) {
+    return { kind: 'briefs' };
+  }
+  if (parts[0] === 'briefs' && parts[1] && parts.length === 2) {
+    return { kind: 'brief-detail', date: parts[1] };
+  }
   return { kind: 'holistic' };
 }
 
@@ -63,6 +71,10 @@ export function routeToPath(route: Route): string {
       return `/session-detail/${encodeURIComponent(route.projectDir)}/${encodeURIComponent(route.sessionId)}`;
     case 'session-run':
       return `/project/${encodeURIComponent(route.projectDir)}/session/${encodeURIComponent(route.sessionId)}/run/${encodeURIComponent(route.label)}`;
+    case 'briefs':
+      return '/briefs';
+    case 'brief-detail':
+      return `/briefs/${encodeURIComponent(route.date)}`;
   }
 }
 
