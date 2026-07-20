@@ -489,9 +489,9 @@ export function createDashboardServer(config: Config): Application {
           });
 
           // Auto-trigger derive-insights after analyze completes (fire-and-forget)
-          if (result.insightsPersisted > 0 && label) {
-            const workItems = getWorkItemsForRun(db, projectDir, sessionId, label);
-            deriveSessionInsights({ projectDir, sessionId, label, workItems })
+          if (result.insightsPersisted > 0) {
+            const workItems = getWorkItemsForRun(db, projectDir, sessionId, result.label);
+            deriveSessionInsights({ projectDir, sessionId, label: result.label, workItems })
               .then((derived) => {
                 insertDerivedInsights(db, derived);
               })
