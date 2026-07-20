@@ -30,6 +30,7 @@ import {
   insertDerivedInsights,
   getDerivedInsights,
   type AnalyticsFilter,
+  type DateRange,
 } from '../analytics/index.js';
 
 interface AnalyzeJob {
@@ -63,6 +64,17 @@ function parsePositiveInt(value: string | undefined, defaultVal: number): number
   const num = parseInt(value, 10);
   if (isNaN(num) || num <= 0) return null;
   return num;
+}
+
+function parseDateRange(req: Request): DateRange | null {
+  const fromDate = parseDate(req.query.fromDate as string);
+  const toDate = parseDate(req.query.toDate as string);
+  if (req.query.fromDate || req.query.toDate) {
+    if (!fromDate || !toDate || fromDate > toDate) return null;
+    return { fromDate, toDate };
+  }
+  const date = parseDate(req.query.date as string);
+  return date ? { date } : null;
 }
 
 /**
@@ -136,11 +148,11 @@ export function createDashboardServer(config: Config): Application {
 
   app.get('/api/top-insights', (req: Request, res: Response) => {
     try {
-      const date = parseDate(req.query.date as string);
-      if (!date) {
-        return res
-          .status(400)
-          .json({ error: 'Invalid or missing date parameter: must be YYYY-MM-DD' });
+      const range = parseDateRange(req);
+      if (!range) {
+        return res.status(400).json({
+          error: 'Invalid or missing date: provide date=YYYY-MM-DD or fromDate & toDate=YYYY-MM-DD',
+        });
       }
       const limit = parsePositiveInt(req.query.limit as string, 10);
       if (limit === null) {
@@ -159,8 +171,8 @@ export function createDashboardServer(config: Config): Application {
         offset = parseInt(offsetRaw, 10);
       }
       const filter = parseFilter(req);
-      const insights = getTopInsights(db, date, limit, filter, offset);
-      const total = getTopInsightsCount(db, date, filter);
+      const insights = getTopInsights(db, range, limit, filter, offset);
+      const total = getTopInsightsCount(db, range, filter);
       const totalPages = Math.max(1, Math.ceil(total / limit));
       res.json({ insights, total, totalPages, limit, offset });
     } catch (error) {
@@ -185,14 +197,15 @@ export function createDashboardServer(config: Config): Application {
 
   app.get('/api/cross-project', (req: Request, res: Response) => {
     try {
-      const date = parseDate(req.query.date as string);
-      if (!date) {
-        return res
-          .status(400)
-          .json({ error: 'Invalid or missing date parameter: must be YYYY-MM-DD' });
+      const range = parseDateRange(req);
+      if (!range) {
+        return res.status(400).json({
+          error: 'Invalid or missing date: provide date=YYYY-MM-DD or fromDate & toDate=YYYY-MM-DD',
+        });
       }
-      const rollup = getCrossProjectRollup(db, date, parseFilter(req));
-      res.json(rollup);
+      const filter = parseFilter(req);
+      const result = getCrossProjectRollup(db, range, filter);
+      res.json(result);
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch cross-project rollup' });
     }
@@ -215,13 +228,14 @@ export function createDashboardServer(config: Config): Application {
 
   app.get('/api/effort-breakdown', (req: Request, res: Response) => {
     try {
-      const date = parseDate(req.query.date as string);
-      if (!date) {
-        return res
-          .status(400)
-          .json({ error: 'Invalid or missing date parameter: must be YYYY-MM-DD' });
+      const range = parseDateRange(req);
+      if (!range) {
+        return res.status(400).json({
+          error: 'Invalid or missing date: provide date=YYYY-MM-DD or fromDate & toDate=YYYY-MM-DD',
+        });
       }
-      const breakdown = getEffortBreakdown(db, date, parseFilter(req));
+      const filter = parseFilter(req);
+      const breakdown = getEffortBreakdown(db, range, filter);
       res.json(breakdown);
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch effort breakdown' });
@@ -245,14 +259,15 @@ export function createDashboardServer(config: Config): Application {
 
   app.get('/api/effort-by-category', (req: Request, res: Response) => {
     try {
-      const date = parseDate(req.query.date as string);
-      if (!date) {
-        return res
-          .status(400)
-          .json({ error: 'Invalid or missing date parameter: must be YYYY-MM-DD' });
+      const range = parseDateRange(req);
+      if (!range) {
+        return res.status(400).json({
+          error: 'Invalid or missing date: provide date=YYYY-MM-DD or fromDate & toDate=YYYY-MM-DD',
+        });
       }
-      const breakdown = getEffortByCategory(db, date, parseFilter(req));
-      res.json(breakdown);
+      const filter = parseFilter(req);
+      const result = getEffortByCategory(db, range, filter);
+      res.json(result);
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch effort by category' });
     }
