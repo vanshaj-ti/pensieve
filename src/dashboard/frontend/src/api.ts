@@ -10,6 +10,7 @@ import type {
   EffortByCategoryPoint,
   LabelSummary,
   ProjectRollup,
+  ProjectEffortBreakdown,
   ProjectSummary,
   RecurrenceChain,
   SessionRun,
@@ -59,6 +60,12 @@ export const fetchCrossProject = (date: string, filter: AnalyticsFilter = {}) =>
   fetchJson<ProjectRollup[]>(
     `/api/cross-project${buildQuery({ date, ...filter })}`,
     'cross-project rollup',
+  );
+
+export const fetchProjectEffortBreakdown = (date: string, filter: AnalyticsFilter = {}) =>
+  fetchJson<ProjectEffortBreakdown[]>(
+    `/api/project-effort-breakdown${buildQuery({ date, ...filter })}`,
+    'project effort breakdown',
   );
 
 export const fetchEffortBreakdown = (date: string, filter: AnalyticsFilter = {}) =>

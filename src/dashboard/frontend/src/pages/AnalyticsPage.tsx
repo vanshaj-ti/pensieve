@@ -6,13 +6,13 @@ import type {
   EffortBreakdown,
   EffortBreakdownTrendPoint,
   EffortByCategoryPoint,
-  ProjectRollup as ProjectRollupType,
+  ProjectEffortBreakdown,
   RecurrenceChain,
   TopInsight,
 } from '../types';
 import {
   fetchCategoryTrend,
-  fetchCrossProject,
+  fetchProjectEffortBreakdown,
   fetchDates,
   fetchEffortBreakdown,
   fetchEffortBreakdownTrend,
@@ -50,7 +50,7 @@ export function AnalyticsPage({ filter, scopeLabel, route }: Props) {
   const [categoryTrend, setCategoryTrend] = useState<CategoryTrendPoint[]>([]);
   const [topInsights, setTopInsights] = useState<TopInsight[]>([]);
   const [recurrenceChains, setRecurrenceChains] = useState<RecurrenceChain[]>([]);
-  const [crossProject, setCrossProject] = useState<ProjectRollupType[]>([]);
+  const [projectEffort, setProjectEffort] = useState<ProjectEffortBreakdown[]>([]);
   const [effortBreakdown, setEffortBreakdown] = useState<EffortBreakdown | null>(null);
   const [effortTrend, setEffortTrend] = useState<EffortBreakdownTrendPoint[]>([]);
   const [effortByCategory, setEffortByCategory] = useState<EffortByCategoryPoint[]>([]);
@@ -89,7 +89,7 @@ export function AnalyticsPage({ filter, scopeLabel, route }: Props) {
       fetchCategoryTrend(trendDays, filter),
       fetchTopInsights(date, FULL_INSIGHTS_LIMIT, filter),
       fetchRecurrenceChains(trendDays, filter),
-      fetchCrossProject(date, filter),
+      fetchProjectEffortBreakdown(date, filter),
       fetchEffortBreakdown(date, filter),
       fetchEffortBreakdownTrend(trendDays, filter),
       fetchEffortByCategory(date, filter),
@@ -99,7 +99,7 @@ export function AnalyticsPage({ filter, scopeLabel, route }: Props) {
           categoryTrendRes,
           topInsightsRes,
           recurrenceChainsRes,
-          crossProjectRes,
+          projectEffortRes,
           effortBreakdownRes,
           effortTrendRes,
           effortByCategoryRes,
@@ -107,7 +107,7 @@ export function AnalyticsPage({ filter, scopeLabel, route }: Props) {
           setCategoryTrend(categoryTrendRes);
           setTopInsights(topInsightsRes);
           setRecurrenceChains(recurrenceChainsRes);
-          setCrossProject(crossProjectRes);
+          setProjectEffort(projectEffortRes);
           setEffortBreakdown(effortBreakdownRes);
           setEffortTrend(effortTrendRes);
           setEffortByCategory(effortByCategoryRes);
@@ -182,10 +182,10 @@ export function AnalyticsPage({ filter, scopeLabel, route }: Props) {
           <RecurrenceChains chains={recurrenceChains} />
         </section>
 
-        {isHolistic && crossProject.length > 1 && (
+        {isHolistic && projectEffort.length > 1 && (
           <section className="card span-full">
             <h2>By Project</h2>
-            <ProjectRollup projects={crossProject} />
+            <ProjectRollup projects={projectEffort} />
           </section>
         )}
       </main>

@@ -15,6 +15,7 @@ import {
   getTopInsights,
   getRecurrenceChains,
   getCrossProjectRollup,
+  getProjectEffortBreakdown,
   getEffortBreakdown,
   getInsightDates,
   getEffortBreakdownTrend,
@@ -180,6 +181,21 @@ export function createDashboardServer(config: Config): Application {
       res.json(rollup);
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch cross-project rollup' });
+    }
+  });
+
+  app.get('/api/project-effort-breakdown', (req: Request, res: Response) => {
+    try {
+      const date = parseDate(req.query.date as string);
+      if (!date) {
+        return res
+          .status(400)
+          .json({ error: 'Invalid or missing date parameter: must be YYYY-MM-DD' });
+      }
+      const breakdown = getProjectEffortBreakdown(db, date, parseFilter(req));
+      res.json(breakdown);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch project effort breakdown' });
     }
   });
 
