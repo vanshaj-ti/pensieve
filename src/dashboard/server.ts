@@ -1,7 +1,7 @@
 import express, { Application, Request, Response } from 'express';
 import path from 'path';
 import http from 'http';
-import { statSync } from 'node:fs';
+import { statSync, readdirSync, readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import type Database from 'better-sqlite3';
 import { fileURLToPath } from 'url';
@@ -14,8 +14,10 @@ import { deriveSessionInsights } from '../synthesis.js';
 import {
   getCategoryTrend,
   getTopInsights,
+  getTopInsightsCount,
   getRecurrenceChains,
   getCrossProjectRollup,
+  getProjectEffortBreakdown,
   getEffortBreakdown,
   getInsightDates,
   getEffortBreakdownTrend,
@@ -134,8 +136,21 @@ export function createDashboardServer(config: Config): Application {
           .status(400)
           .json({ error: 'Invalid limit parameter: must be a positive integer' });
       }
-      const insights = getTopInsights(db, date, limit, parseFilter(req));
-      res.json(insights);
+      const offsetRaw = req.query.offset as string | undefined;
+      let offset = 0;
+      if (offsetRaw !== undefined) {
+        if (!/^\d+$/.test(offsetRaw)) {
+          return res
+            .status(400)
+            .json({ error: 'Invalid offset parameter: must be a non-negative integer' });
+        }
+        offset = parseInt(offsetRaw, 10);
+      }
+      const filter = parseFilter(req);
+      const insights = getTopInsights(db, date, limit, filter, offset);
+      const total = getTopInsightsCount(db, date, filter);
+      const totalPages = Math.max(1, Math.ceil(total / limit));
+      res.json({ insights, total, totalPages, limit, offset });
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch top insights' });
     }
@@ -168,6 +183,21 @@ export function createDashboardServer(config: Config): Application {
       res.json(rollup);
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch cross-project rollup' });
+    }
+  });
+
+  app.get('/api/project-effort-breakdown', (req: Request, res: Response) => {
+    try {
+      const date = parseDate(req.query.date as string);
+      if (!date) {
+        return res
+          .status(400)
+          .json({ error: 'Invalid or missing date parameter: must be YYYY-MM-DD' });
+      }
+      const breakdown = getProjectEffortBreakdown(db, date, parseFilter(req));
+      res.json(breakdown);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch project effort breakdown' });
     }
   });
 
@@ -443,6 +473,7 @@ export function createDashboardServer(config: Config): Application {
             result: { insightsPersisted: result.insightsPersisted },
           });
 
+          // Auto-trigger derive-insights after analyze completes (fire-and-forget)
           if (result.insightsPersisted > 0 && label) {
             const workItems = getWorkItemsForRun(db, projectDir, sessionId, label);
             deriveSessionInsights({ projectDir, sessionId, label, workItems })
@@ -555,6 +586,44 @@ export function createDashboardServer(config: Config): Application {
       res.json({ ok: true, changes });
     } catch (error) {
       res.status(500).json({ error: 'Failed to update label' });
+    }
+  });
+
+  app.get('/api/briefs', (req: Request, res: Response) => {
+    try {
+      const briefsDir = config.briefsDir;
+      let files: string[] = [];
+      try {
+        files = readdirSync(briefsDir).filter((f) => f.endsWith('.md'));
+      } catch {
+        // Directory doesn't exist or unreadable
+      }
+      const dates = files
+        .map((f) => f.slice(0, -3))
+        .sort()
+        .reverse();
+      res.json({ dates });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch brief dates' });
+    }
+  });
+
+  app.get('/api/briefs/:date', (req: Request, res: Response) => {
+    try {
+      const date = parseDate(req.params.date);
+      if (!date) {
+        return res.status(400).json({ error: 'Invalid date format: must be YYYY-MM-DD' });
+      }
+      const filePath = path.join(config.briefsDir, `${date}.md`);
+      let content: string;
+      try {
+        content = readFileSync(filePath, 'utf8');
+      } catch {
+        return res.status(404).json({ error: 'Brief not found' });
+      }
+      res.json({ date, content });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch brief' });
     }
   });
 

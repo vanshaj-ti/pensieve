@@ -668,6 +668,13 @@ tbody tr:hover {
   text-align: center;
 }
 
+.loading-state {
+  color: var(--text-faint);
+  font-size: 0.85rem;
+  padding: 24px 4px;
+  text-align: center;
+}
+
 .error-banner {
   background: color-mix(in srgb, var(--toil) 12%, transparent);
   color: var(--toil);
