@@ -7,6 +7,7 @@ import type Database from 'better-sqlite3';
 import { fileURLToPath } from 'url';
 import { Config } from '../config.js';
 import { openDb } from '../db/schema.js';
+import { createJob, updateJob, getJob, evictOldJobs, JOB_TTL_MS } from '../db/jobs.js';
 import { listSessionFiles, readSessionMetadata } from '../ingest/scanner.js';
 import { runDailyAnalysis } from '../pipeline.js';
 import { deriveSessionInsights } from '../synthesis.js';
@@ -33,18 +34,6 @@ import {
   type AnalyticsFilter,
   type DateRange,
 } from '../analytics/index.js';
-
-interface AnalyzeJob {
-  status: 'queued' | 'running' | 'done' | 'failed';
-  insightsPersisted?: number;
-  error?: string;
-}
-
-interface DeriveInsightsJob {
-  status: 'queued' | 'running' | 'done' | 'failed';
-  insightsDerived?: number;
-  error?: string;
-}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -111,8 +100,7 @@ function parseFilter(req: Request): AnalyticsFilter {
 export function createDashboardServer(config: Config): Application {
   const app = express();
   const db = openDb(config.dbPath);
-  const analyzeJobs = new Map<string, AnalyzeJob>();
-  const deriveInsightsJobs = new Map<string, DeriveInsightsJob>();
+  evictOldJobs(db, JOB_TTL_MS);
 
   // Always resolves to the repo root's dist/dashboard/public, regardless of
   // whether this file is running from src/dashboard (dev/test via tsx/vitest)
@@ -501,9 +489,9 @@ export function createDashboardServer(config: Config): Application {
       }
 
       const jobId = randomUUID();
-      analyzeJobs.set(jobId, { status: 'queued' });
+      createJob(db, jobId, 'analyze', 'queued');
 
-      analyzeJobs.set(jobId, { status: 'running' });
+      updateJob(db, jobId, { status: 'running' });
       runDailyAnalysis({
         projectFilter: projectDir,
         sessionFilter: sessionId,
@@ -512,9 +500,9 @@ export function createDashboardServer(config: Config): Application {
         db,
       })
         .then((result) => {
-          analyzeJobs.set(jobId, {
+          updateJob(db, jobId, {
             status: 'done',
-            insightsPersisted: result.insightsPersisted,
+            result: { insightsPersisted: result.insightsPersisted },
           });
 
           // Auto-trigger derive-insights after analyze completes (fire-and-forget)
@@ -533,7 +521,7 @@ export function createDashboardServer(config: Config): Application {
           }
         })
         .catch((err) => {
-          analyzeJobs.set(jobId, {
+          updateJob(db, jobId, {
             status: 'failed',
             error: err instanceof Error ? err.message : String(err),
           });
@@ -546,11 +534,11 @@ export function createDashboardServer(config: Config): Application {
   });
 
   app.get('/api/sessions/analyze/:jobId', (req: Request, res: Response) => {
-    const job = analyzeJobs.get(req.params.jobId);
+    const job = getJob(db, req.params.jobId);
     if (!job) {
       return res.status(404).json({ error: 'Job not found' });
     }
-    res.json(job);
+    res.json({ status: job.status, ...job.result, error: job.error });
   });
 
   app.post('/api/sessions/derive-insights', (req: Request, res: Response) => {
@@ -567,16 +555,19 @@ export function createDashboardServer(config: Config): Application {
       }
 
       const jobId = randomUUID();
-      deriveInsightsJobs.set(jobId, { status: 'running' });
+      createJob(db, jobId, 'derive_insights', 'running');
 
       const workItems = getWorkItemsForRun(db, projectDir, sessionId, label);
       deriveSessionInsights({ projectDir, sessionId, label, workItems })
         .then((derived) => {
           insertDerivedInsights(db, derived);
-          deriveInsightsJobs.set(jobId, { status: 'done', insightsDerived: derived.length });
+          updateJob(db, jobId, {
+            status: 'done',
+            result: { insightsDerived: derived.length },
+          });
         })
         .catch((err) => {
-          deriveInsightsJobs.set(jobId, {
+          updateJob(db, jobId, {
             status: 'failed',
             error: err instanceof Error ? err.message : String(err),
           });
@@ -589,11 +580,11 @@ export function createDashboardServer(config: Config): Application {
   });
 
   app.get('/api/sessions/derive-insights/:jobId', (req: Request, res: Response) => {
-    const job = deriveInsightsJobs.get(req.params.jobId);
+    const job = getJob(db, req.params.jobId);
     if (!job) {
       return res.status(404).json({ error: 'Job not found' });
     }
-    res.json(job);
+    res.json({ status: job.status, ...job.result, error: job.error });
   });
 
   app.get('/api/derived-insights', (req: Request, res: Response) => {

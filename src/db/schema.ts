@@ -57,6 +57,16 @@ export function initSchema(db: Database.Database): void {
       evidence_insight_ids TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS jobs (
+      id TEXT PRIMARY KEY,
+      kind TEXT NOT NULL,
+      status TEXT NOT NULL,
+      result TEXT,
+      error TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 
   // CREATE TABLE IF NOT EXISTS above is a no-op against a pre-existing
