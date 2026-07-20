@@ -48,6 +48,22 @@ vi.mock('../src/extract/index.js', () => ({
   ]),
 }));
 
+// A freshly listen()-ing server can briefly refuse connections on slower CI
+// runners even after the 'listening' event fires — retry a few times instead
+// of failing the whole test on a transient connection race.
+async function fetchWithRetry(url: string, attempts = 5, delayMs = 50): Promise<Response> {
+  let lastError: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fetch(url);
+    } catch (err) {
+      lastError = err;
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  throw lastError;
+}
+
 describe('dashboard server', () => {
   let tempDir: string;
   let dbPath: string;
@@ -875,7 +891,9 @@ describe('dashboard server', () => {
         server.on('listening', () => resolve());
       });
 
-      const restartRes = await fetch(`http://localhost:${port}/api/sessions/analyze/${jobId}`);
+      const restartRes = await fetchWithRetry(
+        `http://localhost:${port}/api/sessions/analyze/${jobId}`,
+      );
       const jobAfter = await restartRes.json();
       expect(jobAfter.status).toBe(jobBefore.status);
     });
@@ -909,7 +927,7 @@ describe('dashboard server', () => {
         server.on('listening', () => resolve());
       });
 
-      const restartRes = await fetch(
+      const restartRes = await fetchWithRetry(
         `http://localhost:${port}/api/sessions/derive-insights/${jobId}`,
       );
       const jobAfter = await restartRes.json();
