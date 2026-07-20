@@ -172,8 +172,8 @@ describe('analytics', () => {
         ).run(`Insight ${i}`, `ref${i}`, 0.5 + i * 0.1);
       }
 
-      const page1 = getTopInsights(db, '2026-07-15', 2, undefined, 0);
-      const page2 = getTopInsights(db, '2026-07-15', 2, undefined, 2);
+      const page1 = getTopInsights(db, { date: '2026-07-15' }, 2, undefined, 0);
+      const page2 = getTopInsights(db, { date: '2026-07-15' }, 2, undefined, 2);
 
       expect(page1).toHaveLength(2);
       expect(page2).toHaveLength(2);
@@ -184,7 +184,7 @@ describe('analytics', () => {
 
   describe('getTopInsightsCount', () => {
     it('returns 0 for date with no insights', () => {
-      const count = getTopInsightsCount(db, '2026-07-15');
+      const count = getTopInsightsCount(db, { date: '2026-07-15' });
       expect(count).toBe(0);
     });
 
@@ -205,7 +205,7 @@ describe('analytics', () => {
         ).run(`Insight ${i}`, `ref${i}`, 0.5 + i * 0.1);
       }
 
-      const count = getTopInsightsCount(db, '2026-07-15');
+      const count = getTopInsightsCount(db, { date: '2026-07-15' });
       expect(count).toBe(5);
     });
 
@@ -226,7 +226,7 @@ describe('analytics', () => {
       `,
       ).run();
 
-      const countA = getTopInsightsCount(db, '2026-07-15', { projectDir: '/project-a' });
+      const countA = getTopInsightsCount(db, { date: '2026-07-15' }, { projectDir: '/project-a' });
       expect(countA).toBe(1);
     });
   });

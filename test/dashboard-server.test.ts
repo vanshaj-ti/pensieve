@@ -170,9 +170,7 @@ describe('dashboard server', () => {
       expect(page2Res.status).toBe(200);
       const page1 = await page1Res.json();
       const page2 = await page2Res.json();
-      expect(page1.insights).toEqual(
-        getTopInsights(dbForAnalytics, { date }, limit, undefined, 0),
-      );
+      expect(page1.insights).toEqual(getTopInsights(dbForAnalytics, { date }, limit, undefined, 0));
       expect(page2.insights).toEqual(
         getTopInsights(dbForAnalytics, { date }, limit, undefined, limit),
       );
