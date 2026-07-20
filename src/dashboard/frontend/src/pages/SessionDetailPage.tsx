@@ -40,7 +40,11 @@ export function SessionDetailPage({ projectDir, sessionId, onNavigate }: Props) 
   useEffect(load, [projectDir, sessionId]);
 
   const jobKey = `${projectDir}/${sessionId}`;
-  const { jobs, start } = useAnalyzeJob(load);
+  const { jobs, start } = useAnalyzeJob(() => {
+    load();
+    // Re-fetch after short delay to capture auto-triggered derive-insights (eventually-consistent)
+    setTimeout(load, 3000);
+  });
   const job = jobs[jobKey];
   const analyzing = job && job.status !== 'done' && job.status !== 'failed';
 
@@ -108,6 +112,11 @@ export function SessionDetailPage({ projectDir, sessionId, onNavigate }: Props) 
                       <div className="badge-row">
                         <span className="badge badge-category">{run.label || '(default)'}</span>
                         <span className="badge badge-score">{run.insightCount} insights</span>
+                        <span className="badge badge-score">
+                          {run.derivedInsightCount > 0
+                            ? `${run.derivedInsightCount} derived`
+                            : 'No derived insights'}
+                        </span>
                       </div>
                       <span className="insight-meta">{relativeTime(run.latestAt)}</span>
                     </div>

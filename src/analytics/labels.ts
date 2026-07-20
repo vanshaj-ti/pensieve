@@ -79,6 +79,7 @@ export interface SessionRun {
   label: string;
   insightCount: number;
   latestAt: string;
+  derivedInsightCount: number;
 }
 
 /** Every distinct analysis run (label) for one project+session, newest first. */
@@ -100,10 +101,19 @@ export function getSessionRuns(
     )
     .all(projectDir, sessionId) as Array<{ label: string; count: number; latest_at: string }>;
 
+  const derivedRows = db
+    .prepare(
+      `SELECT label, COUNT(*) as count FROM derived_insights
+       WHERE project_dir = ? AND session_id = ? GROUP BY label`,
+    )
+    .all(projectDir, sessionId) as Array<{ label: string; count: number }>;
+  const derivedCountByLabel = new Map(derivedRows.map((r) => [r.label, r.count]));
+
   return rows.map((row) => ({
     label: row.label,
     insightCount: row.count,
     latestAt: row.latest_at,
+    derivedInsightCount: derivedCountByLabel.get(row.label) ?? 0,
   }));
 }
 

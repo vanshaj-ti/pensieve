@@ -6,13 +6,13 @@ import type {
   EffortBreakdown,
   EffortBreakdownTrendPoint,
   EffortByCategoryPoint,
-  ProjectRollup as ProjectRollupType,
+  ProjectEffortBreakdown,
   RecurrenceChain,
   TopInsight,
 } from '../types';
 import {
   fetchCategoryTrend,
-  fetchCrossProject,
+  fetchProjectEffortBreakdown,
   fetchDates,
   fetchEffortBreakdown,
   fetchEffortBreakdownTrend,
@@ -37,6 +37,13 @@ interface Props {
 const INSIGHTS_PAGE_SIZE = 20;
 const TREND_DAYS = 30;
 
+function daysSinceDate(dateStr: string): number {
+  const today = new Date();
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+  const diffMs = Date.parse(`${todayKey}T00:00:00`) - Date.parse(`${dateStr}T00:00:00`);
+  return Math.max(1, Math.round(diffMs / 86400000) + 1);
+}
+
 export function AnalyticsPage({ filter, scopeLabel, route }: Props) {
   const [date, setDate] = useState<string | null>(null);
   const [dates, setDates] = useState<string[]>([]);
@@ -46,7 +53,7 @@ export function AnalyticsPage({ filter, scopeLabel, route }: Props) {
   const [insightsTotal, setInsightsTotal] = useState(0);
   const [insightsTotalPages, setInsightsTotalPages] = useState(1);
   const [recurrenceChains, setRecurrenceChains] = useState<RecurrenceChain[]>([]);
-  const [crossProject, setCrossProject] = useState<ProjectRollupType[]>([]);
+  const [projectEffort, setProjectEffort] = useState<ProjectEffortBreakdown[]>([]);
   const [effortBreakdown, setEffortBreakdown] = useState<EffortBreakdown | null>(null);
   const [effortTrend, setEffortTrend] = useState<EffortBreakdownTrendPoint[]>([]);
   const [effortByCategory, setEffortByCategory] = useState<EffortByCategoryPoint[]>([]);
@@ -74,6 +81,12 @@ export function AnalyticsPage({ filter, scopeLabel, route }: Props) {
     // the route in App.tsx).
   }, [filterKey]);
 
+  const isScopedToSession = route.kind === 'session' || route.kind === 'session-run';
+  const trendDays =
+    isScopedToSession && dates.length > 0
+      ? Math.min(TREND_DAYS, daysSinceDate(dates[dates.length - 1]))
+      : TREND_DAYS;
+
   const reload = useCallback(() => {
     if (!date) return;
     setError(null);
@@ -82,12 +95,12 @@ export function AnalyticsPage({ filter, scopeLabel, route }: Props) {
     const abortController = new AbortController();
     reloadAbortRef.current = abortController;
     Promise.all([
-      fetchCategoryTrend(TREND_DAYS, filter),
+      fetchCategoryTrend(trendDays, filter),
       fetchTopInsights(date, INSIGHTS_PAGE_SIZE, (insightsPage - 1) * INSIGHTS_PAGE_SIZE, filter),
-      fetchRecurrenceChains(TREND_DAYS, filter),
-      fetchCrossProject(date, filter),
+      fetchRecurrenceChains(trendDays, filter),
+      fetchProjectEffortBreakdown(date, filter),
       fetchEffortBreakdown(date, filter),
-      fetchEffortBreakdownTrend(TREND_DAYS, filter),
+      fetchEffortBreakdownTrend(trendDays, filter),
       fetchEffortByCategory(date, filter),
     ])
       .then(
@@ -95,7 +108,7 @@ export function AnalyticsPage({ filter, scopeLabel, route }: Props) {
           categoryTrendRes,
           topInsightsRes,
           recurrenceChainsRes,
-          crossProjectRes,
+          projectEffortRes,
           effortBreakdownRes,
           effortTrendRes,
           effortByCategoryRes,
@@ -107,7 +120,7 @@ export function AnalyticsPage({ filter, scopeLabel, route }: Props) {
           setInsightsTotal(topInsightsRes.total);
           setInsightsTotalPages(topInsightsRes.totalPages);
           setRecurrenceChains(recurrenceChainsRes);
-          setCrossProject(crossProjectRes);
+          setProjectEffort(projectEffortRes);
           setEffortBreakdown(effortBreakdownRes);
           setEffortTrend(effortTrendRes);
           setEffortByCategory(effortByCategoryRes);
@@ -117,8 +130,8 @@ export function AnalyticsPage({ filter, scopeLabel, route }: Props) {
         if (abortController.signal.aborted) return;
         setError(err instanceof Error ? err.message : 'Failed to load data');
       });
-    // Same filterKey rationale as above.
-  }, [date, filterKey, insightsPage]);
+    // Same filterKey rationale as above; trendDays is derived from dates which changes with filterKey.
+  }, [date, filterKey, insightsPage, trendDays]);
 
   useEffect(() => {
     reload();
@@ -164,7 +177,9 @@ export function AnalyticsPage({ filter, scopeLabel, route }: Props) {
         <section className="card">
           <h2>
             Toil Over Time
-            <span className="card-hint">last {TREND_DAYS} days</span>
+            <span className="card-hint">
+              last {trendDays} day{trendDays === 1 ? '' : 's'}
+            </span>
           </h2>
           <EffortTrendChart data={effortTrend} />
         </section>
@@ -172,7 +187,9 @@ export function AnalyticsPage({ filter, scopeLabel, route }: Props) {
         <section className="card span-full">
           <h2>
             Category Trend
-            <span className="card-hint">last {TREND_DAYS} days</span>
+            <span className="card-hint">
+              last {trendDays} day{trendDays === 1 ? '' : 's'}
+            </span>
           </h2>
           <CategoryTrendChart data={categoryTrend} />
         </section>
@@ -208,10 +225,10 @@ export function AnalyticsPage({ filter, scopeLabel, route }: Props) {
           <RecurrenceChains chains={recurrenceChains} />
         </section>
 
-        {isHolistic && crossProject.length > 1 && (
+        {isHolistic && projectEffort.length > 1 && (
           <section className="card span-full">
             <h2>By Project</h2>
-            <ProjectRollup projects={crossProject} />
+            <ProjectRollup projects={projectEffort} />
           </section>
         )}
       </main>

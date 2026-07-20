@@ -80,6 +80,17 @@ export interface ProjectRollup {
   insightCount: number;
 }
 
+export interface ProjectEffortBreakdown {
+  projectDir: string;
+  toil: number;
+  judgment: number;
+  overhead: number;
+  total: number;
+  toilRatio: number;
+  judgmentRatio: number;
+  overheadRatio: number;
+}
+
 export interface LabelSummary {
   label: string;
   count: number;
@@ -131,6 +142,7 @@ export interface SessionRun {
   label: string;
   insightCount: number;
   latestAt: string;
+  derivedInsightCount: number;
 }
 
 export type AnalyzeJobStatus = 'queued' | 'running' | 'done' | 'failed';
