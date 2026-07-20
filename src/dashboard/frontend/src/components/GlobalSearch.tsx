@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { SearchResult } from '../types';
 import { fetchSearch } from '../api';
-import { Route } from '../App';
+import type { Route } from '../hooks/useRoute';
 
 interface GlobalSearchProps {
   onNavigate: (route: Route) => void;
