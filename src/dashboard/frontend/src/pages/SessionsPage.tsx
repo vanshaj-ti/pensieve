@@ -43,7 +43,11 @@ function ProjectList({ onSelect }: { onSelect: (projectDir: string) => void }) {
   }
 
   if (!projects) {
-    return null;
+    return (
+      <div className="loading-state" style={{ gridColumn: '1 / -1' }}>
+        Loading…
+      </div>
+    );
   }
 
   if (projects.length === 0) {
@@ -194,6 +198,8 @@ function ProjectSessions({
         </div>
 
         {error && <div className="error-banner">Failed to load sessions: {error}</div>}
+
+        {sessions === null && <div className="loading-state">Loading…</div>}
 
         {sessions && sessions.length === 0 && (
           <div className="empty-state">
