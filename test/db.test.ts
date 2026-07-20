@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openDb, packEmbedding, unpackEmbedding } from '../src/db/schema.js';
+import { createJob, updateJob, getJob, evictOldJobs } from '../src/db/jobs.js';
 import type Database from 'better-sqlite3';
 
 let dir: string;
@@ -178,5 +179,102 @@ describe('packEmbedding / unpackEmbedding', () => {
     for (let i = 0; i < original.length; i++) {
       expect(unpacked[i]).toBeCloseTo(original[i], 5);
     }
+  });
+});
+
+describe('jobs', () => {
+  it('createJob inserts a job with queued/running/done/failed status', () => {
+    const jobId = 'job-1';
+    createJob(db, jobId, 'analyze', 'queued');
+
+    const row = db.prepare('SELECT * FROM jobs WHERE id = ?').get(jobId) as {
+      id: string;
+      kind: string;
+      status: string;
+      result: string | null;
+      error: string | null;
+    };
+    expect(row.id).toBe(jobId);
+    expect(row.kind).toBe('analyze');
+    expect(row.status).toBe('queued');
+    expect(row.result).toBeNull();
+    expect(row.error).toBeNull();
+  });
+
+  it('updateJob patches status, result, error, and updated_at', () => {
+    const jobId = 'job-1';
+    createJob(db, jobId, 'analyze', 'queued');
+    updateJob(db, jobId, {
+      status: 'done',
+      result: { insightsPersisted: 5 },
+    });
+
+    const job = getJob(db, jobId);
+    expect(job?.status).toBe('done');
+    expect(job?.result).toEqual({ insightsPersisted: 5 });
+    expect(job?.error).toBeUndefined();
+  });
+
+  it('updateJob with error overrides result', () => {
+    const jobId = 'job-1';
+    createJob(db, jobId, 'derive_insights', 'running');
+    updateJob(db, jobId, {
+      status: 'failed',
+      error: 'Test error',
+    });
+
+    const job = getJob(db, jobId);
+    expect(job?.status).toBe('failed');
+    expect(job?.error).toBe('Test error');
+    expect(job?.result).toBeUndefined();
+  });
+
+  it('getJob returns undefined for missing jobId', () => {
+    const job = getJob(db, 'nonexistent');
+    expect(job).toBeUndefined();
+  });
+
+  it('result JSON round-trips correctly', () => {
+    const jobId = 'job-1';
+    const originalResult = { insightsDerived: 3, nested: { foo: 'bar' } };
+    createJob(db, jobId, 'derive_insights', 'queued');
+    updateJob(db, jobId, {
+      status: 'done',
+      result: originalResult,
+    });
+
+    const job = getJob(db, jobId);
+    expect(job?.result).toEqual(originalResult);
+  });
+
+  it('evictOldJobs removes only terminal+stale rows', () => {
+    const now = new Date();
+    const old = new Date(now.getTime() - 25 * 60 * 60 * 1000); // 25h ago
+    const recent = new Date(now.getTime() - 1 * 60 * 60 * 1000); // 1h ago
+
+    const oldDoneId = 'old-done';
+    const oldFailedId = 'old-failed';
+    const recentDoneId = 'recent-done';
+    const queuedId = 'queued';
+
+    createJob(db, oldDoneId, 'analyze', 'done');
+    createJob(db, oldFailedId, 'analyze', 'failed');
+    createJob(db, recentDoneId, 'analyze', 'done');
+    createJob(db, queuedId, 'analyze', 'queued');
+
+    db.prepare('UPDATE jobs SET updated_at = ? WHERE id = ?').run(old.toISOString(), oldDoneId);
+    db.prepare('UPDATE jobs SET updated_at = ? WHERE id = ?').run(old.toISOString(), oldFailedId);
+    db.prepare('UPDATE jobs SET updated_at = ? WHERE id = ?').run(
+      recent.toISOString(),
+      recentDoneId,
+    );
+
+    const ttl = 24 * 60 * 60 * 1000;
+    evictOldJobs(db, ttl);
+
+    expect(getJob(db, oldDoneId)).toBeUndefined();
+    expect(getJob(db, oldFailedId)).toBeUndefined();
+    expect(getJob(db, recentDoneId)).toBeDefined();
+    expect(getJob(db, queuedId)).toBeDefined();
   });
 });

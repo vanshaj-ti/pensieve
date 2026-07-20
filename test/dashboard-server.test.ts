@@ -526,4 +526,73 @@ describe('dashboard server', () => {
       expect(job.insightsDerived).toBe(0);
     });
   });
+
+  describe('job persistence across restart', () => {
+    it('survives analyze job state through server restart', async () => {
+      const jobRes = await fetch(`http://localhost:${port}/api/sessions/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectDir: '/project-a',
+          sessionId: 'session-1',
+        }),
+      });
+      const { jobId } = await jobRes.json();
+
+      const checkRes = await fetch(`http://localhost:${port}/api/sessions/analyze/${jobId}`);
+      const jobBefore = await checkRes.json();
+      expect(['queued', 'running', 'done', 'failed']).toContain(jobBefore.status);
+
+      server.close();
+      await new Promise<void>((resolve) => {
+        server.on('close', () => resolve());
+      });
+
+      app = createDashboardServer(config);
+      server = app.listen(port);
+      await new Promise<void>((resolve) => {
+        server.on('listening', () => resolve());
+      });
+
+      const restartRes = await fetch(`http://localhost:${port}/api/sessions/analyze/${jobId}`);
+      const jobAfter = await restartRes.json();
+      expect(jobAfter.status).toBe(jobBefore.status);
+    });
+
+    it('survives derive-insights job state through server restart', async () => {
+      const jobRes = await fetch(`http://localhost:${port}/api/sessions/derive-insights`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          projectDir: '/project-a',
+          sessionId: 'session-1',
+          label: 'default',
+        }),
+      });
+      const { jobId } = await jobRes.json();
+
+      const checkRes = await fetch(
+        `http://localhost:${port}/api/sessions/derive-insights/${jobId}`,
+      );
+      const jobBefore = await checkRes.json();
+      expect(['running', 'done', 'failed']).toContain(jobBefore.status);
+
+      server.close();
+      await new Promise<void>((resolve) => {
+        server.on('close', () => resolve());
+      });
+
+      app = createDashboardServer(config);
+      server = app.listen(port);
+      await new Promise<void>((resolve) => {
+        server.on('listening', () => resolve());
+      });
+
+      const restartRes = await fetch(
+        `http://localhost:${port}/api/sessions/derive-insights/${jobId}`,
+      );
+      const jobAfter = await restartRes.json();
+      expect(jobAfter.status).toBe(jobBefore.status);
+    });
+  });
 });
