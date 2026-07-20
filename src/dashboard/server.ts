@@ -13,6 +13,7 @@ import { deriveSessionInsights } from '../synthesis.js';
 import {
   getCategoryTrend,
   getTopInsights,
+  getTopInsightsCount,
   getRecurrenceChains,
   getCrossProjectRollup,
   getProjectEffortBreakdown,
@@ -147,8 +148,21 @@ export function createDashboardServer(config: Config): Application {
           .status(400)
           .json({ error: 'Invalid limit parameter: must be a positive integer' });
       }
-      const insights = getTopInsights(db, date, limit, parseFilter(req));
-      res.json(insights);
+      const offsetRaw = req.query.offset as string | undefined;
+      let offset = 0;
+      if (offsetRaw !== undefined) {
+        if (!/^\d+$/.test(offsetRaw)) {
+          return res
+            .status(400)
+            .json({ error: 'Invalid offset parameter: must be a non-negative integer' });
+        }
+        offset = parseInt(offsetRaw, 10);
+      }
+      const filter = parseFilter(req);
+      const insights = getTopInsights(db, date, limit, filter, offset);
+      const total = getTopInsightsCount(db, date, filter);
+      const totalPages = Math.max(1, Math.ceil(total / limit));
+      res.json({ insights, total, totalPages, limit, offset });
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch top insights' });
     }

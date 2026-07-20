@@ -152,3 +152,11 @@ export interface AnalyzeJob {
   insightsPersisted?: number;
   error?: string;
 }
+
+export interface PaginatedTopInsights {
+  insights: TopInsight[];
+  total: number;
+  totalPages: number;
+  limit: number;
+  offset: number;
+}

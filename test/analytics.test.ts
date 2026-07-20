@@ -6,6 +6,7 @@ import { openDb } from '../src/db/schema.js';
 import {
   getCategoryTrend,
   getTopInsights,
+  getTopInsightsCount,
   getRecurrenceChains,
   getCrossProjectRollup,
   getProjectEffortBreakdown,
@@ -152,6 +153,81 @@ describe('analytics', () => {
 
       expect(result).toHaveLength(1);
       expect(result[0]?.projectDir).toBe('/home/user/project');
+    });
+
+    it('respects offset parameter', () => {
+      db.prepare(
+        `
+        INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
+        VALUES ('2026-07-15', '/tmp/project', 'session-1', 1, 20)
+      `,
+      ).run();
+
+      for (let i = 0; i < 5; i++) {
+        db.prepare(
+          `
+          INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
+          VALUES (1, 'architecture_decisions', ?, ?, ?, NULL, NULL, '2026-07-15T10:00:00Z')
+        `,
+        ).run(`Insight ${i}`, `ref${i}`, 0.5 + i * 0.1);
+      }
+
+      const page1 = getTopInsights(db, '2026-07-15', 2, undefined, 0);
+      const page2 = getTopInsights(db, '2026-07-15', 2, undefined, 2);
+
+      expect(page1).toHaveLength(2);
+      expect(page2).toHaveLength(2);
+      expect(page1[0]?.text).toBe('Insight 4');
+      expect(page2[0]?.text).toBe('Insight 2');
+    });
+  });
+
+  describe('getTopInsightsCount', () => {
+    it('returns 0 for date with no insights', () => {
+      const count = getTopInsightsCount(db, '2026-07-15');
+      expect(count).toBe(0);
+    });
+
+    it('counts all insights for a date', () => {
+      db.prepare(
+        `
+        INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
+        VALUES ('2026-07-15', '/tmp/project', 'session-1', 1, 20)
+      `,
+      ).run();
+
+      for (let i = 0; i < 5; i++) {
+        db.prepare(
+          `
+          INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
+          VALUES (1, 'architecture_decisions', ?, ?, ?, NULL, NULL, '2026-07-15T10:00:00Z')
+        `,
+        ).run(`Insight ${i}`, `ref${i}`, 0.5 + i * 0.1);
+      }
+
+      const count = getTopInsightsCount(db, '2026-07-15');
+      expect(count).toBe(5);
+    });
+
+    it('respects filter same as getTopInsights', () => {
+      db.prepare(
+        `
+        INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
+        VALUES ('2026-07-15', '/project-a', 'session-1', 1, 10),
+               ('2026-07-15', '/project-b', 'session-2', 1, 10)
+      `,
+      ).run();
+
+      db.prepare(
+        `
+        INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
+        VALUES (1, 'architecture_decisions', 'A insight', 'ref1', 0.8, NULL, NULL, '2026-07-15T10:00:00Z'),
+               (2, 'architecture_decisions', 'B insight', 'ref2', 0.8, NULL, NULL, '2026-07-15T10:00:00Z')
+      `,
+      ).run();
+
+      const countA = getTopInsightsCount(db, '2026-07-15', { projectDir: '/project-a' });
+      expect(countA).toBe(1);
     });
   });
 

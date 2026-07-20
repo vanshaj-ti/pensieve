@@ -44,11 +44,22 @@ export const fetchCategoryTrend = (days: number, filter: AnalyticsFilter = {}) =
     'category trend',
   );
 
-export const fetchTopInsights = (date: string, limit: number, filter: AnalyticsFilter = {}) =>
-  fetchJson<TopInsight[]>(
-    `/api/top-insights${buildQuery({ date, limit, ...filter })}`,
+export const fetchTopInsights = (
+  date: string,
+  limit: number,
+  offset: number,
+  filter: AnalyticsFilter = {},
+) =>
+  fetchJson(
+    `/api/top-insights${buildQuery({ date, limit, offset, ...filter })}`,
     'top insights',
-  );
+  ) as Promise<{
+    insights: TopInsight[];
+    total: number;
+    totalPages: number;
+    limit: number;
+    offset: number;
+  }>;
 
 export const fetchRecurrenceChains = (days: number, filter: AnalyticsFilter = {}) =>
   fetchJson<RecurrenceChain[]>(
