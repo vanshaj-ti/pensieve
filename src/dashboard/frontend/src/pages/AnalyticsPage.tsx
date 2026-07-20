@@ -3,6 +3,7 @@ import type { Route } from '../hooks/useRoute';
 import type {
   AnalyticsFilter,
   CategoryTrendPoint,
+  DateRange,
   EffortBreakdown,
   EffortBreakdownTrendPoint,
   EffortByCategoryPoint,
@@ -44,8 +45,16 @@ function daysSinceDate(dateStr: string): number {
   return Math.max(1, Math.round(diffMs / 86400000) + 1);
 }
 
+function shiftDate(iso: string, days: number): string {
+  const d = new Date(iso + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().split('T')[0];
+}
+
 export function AnalyticsPage({ filter, scopeLabel, route }: Props) {
-  const [date, setDate] = useState<string | null>(null);
+  const [preset, setPreset] = useState<'today' | '7d' | '30d' | 'custom'>('today');
+  const [customFrom, setCustomFrom] = useState<string>('');
+  const [customTo, setCustomTo] = useState<string>('');
   const [dates, setDates] = useState<string[]>([]);
   const [categoryTrend, setCategoryTrend] = useState<CategoryTrendPoint[]>([]);
   const [topInsights, setTopInsights] = useState<TopInsight[]>([]);
@@ -68,8 +77,11 @@ export function AnalyticsPage({ filter, scopeLabel, route }: Props) {
       .then((d) => {
         if (cancelled) return;
         setDates(d);
-        setDate((prev) => (prev && d.includes(prev) ? prev : (d[0] ?? null)));
         setInsightsPage(1);
+        if (d.length > 0) {
+          setCustomFrom((prev) => prev || d[0]);
+          setCustomTo((prev) => prev || d[0]);
+        }
       })
       .catch((err) => !cancelled && setError(err.message));
     return () => {
@@ -88,7 +100,20 @@ export function AnalyticsPage({ filter, scopeLabel, route }: Props) {
       : TREND_DAYS;
 
   const reload = useCallback(() => {
-    if (!date) return;
+    if (dates.length === 0) return;
+    let range: DateRange | null = null;
+    if (preset === 'today') {
+      range = { date: dates[0] };
+    } else if (preset === '7d') {
+      const from = shiftDate(dates[0], -6);
+      range = { fromDate: from, toDate: dates[0] };
+    } else if (preset === '30d') {
+      const from = shiftDate(dates[0], -29);
+      range = { fromDate: from, toDate: dates[0] };
+    } else if (customFrom && customTo && customFrom <= customTo) {
+      range = { fromDate: customFrom, toDate: customTo };
+    }
+    if (!range) return;
     setError(null);
     const currentPage = insightsPage;
     reloadAbortRef.current?.abort();
@@ -96,12 +121,12 @@ export function AnalyticsPage({ filter, scopeLabel, route }: Props) {
     reloadAbortRef.current = abortController;
     Promise.all([
       fetchCategoryTrend(trendDays, filter),
-      fetchTopInsights(date, INSIGHTS_PAGE_SIZE, (insightsPage - 1) * INSIGHTS_PAGE_SIZE, filter),
+      fetchTopInsights(range, INSIGHTS_PAGE_SIZE, (insightsPage - 1) * INSIGHTS_PAGE_SIZE, filter),
       fetchRecurrenceChains(trendDays, filter),
-      fetchProjectEffortBreakdown(date, filter),
-      fetchEffortBreakdown(date, filter),
+      fetchProjectEffortBreakdown('date' in range ? range.date : range.toDate, filter),
+      fetchEffortBreakdown(range, filter),
       fetchEffortBreakdownTrend(trendDays, filter),
-      fetchEffortByCategory(date, filter),
+      fetchEffortByCategory(range, filter),
     ])
       .then(
         ([
@@ -131,7 +156,7 @@ export function AnalyticsPage({ filter, scopeLabel, route }: Props) {
         setError(err instanceof Error ? err.message : 'Failed to load data');
       });
     // Same filterKey rationale as above; trendDays is derived from dates which changes with filterKey.
-  }, [date, filterKey, insightsPage, trendDays]);
+  }, [preset, customFrom, customTo, dates, filterKey, insightsPage, trendDays]);
 
   useEffect(() => {
     reload();
@@ -167,13 +192,42 @@ export function AnalyticsPage({ filter, scopeLabel, route }: Props) {
 
   return (
     <>
+      <div className="date-range-selector">
+        <button onClick={() => setPreset('today')} className={preset === 'today' ? 'active' : ''}>
+          Today
+        </button>
+        <button onClick={() => setPreset('7d')} className={preset === '7d' ? 'active' : ''}>
+          7d
+        </button>
+        <button onClick={() => setPreset('30d')} className={preset === '30d' ? 'active' : ''}>
+          30d
+        </button>
+        <button onClick={() => setPreset('custom')} className={preset === 'custom' ? 'active' : ''}>
+          Custom
+        </button>
+        {preset === 'custom' && (
+          <div className="custom-date-inputs">
+            <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
+            <span>–</span>
+            <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
+          </div>
+        )}
+      </div>
       <main className="analytics-grid">
         <StatStrip effortBreakdown={effortBreakdown} topInsights={topInsights} />
 
         <section className="card">
           <h2>
             Effort Breakdown
-            <span className="card-hint">today</span>
+            <span className="card-hint">
+              {preset === 'today'
+                ? 'today'
+                : preset === '7d'
+                  ? 'last 7 days'
+                  : preset === '30d'
+                    ? 'last 30 days'
+                    : `${customFrom} – ${customTo}`}
+            </span>
           </h2>
           <EffortBreakdownChart data={effortBreakdown} byCategory={effortByCategory} />
         </section>

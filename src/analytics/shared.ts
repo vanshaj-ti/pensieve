@@ -6,6 +6,15 @@ export function localDateKey(ms: number): string {
   return `${year}-${month}-${day}`;
 }
 
+export type DateRange = { date: string } | { fromDate: string; toDate: string };
+
+export function buildDateClause(range: DateRange): { sql: string; params: string[] } {
+  if ('date' in range) {
+    return { sql: 'e.date = ?', params: [range.date] };
+  }
+  return { sql: 'e.date BETWEEN ? AND ?', params: [range.fromDate, range.toDate] };
+}
+
 /** Narrows an analytics query to one run label, project, and/or session — all optional, combinable. */
 export interface AnalyticsFilter {
   label?: string;

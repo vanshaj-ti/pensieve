@@ -230,10 +230,10 @@ export async function writeBrief(
   });
 
   // Fetch analytics data
-  const topInsights = getTopInsights(db, date, 5);
+  const topInsights = getTopInsights(db, { date }, 5);
   const recurrenceChains = getRecurrenceChains(db, 30);
-  const crossProjectRollup = getCrossProjectRollup(db, date);
-  const effortBreakdown = getEffortBreakdown(db, date);
+  const crossProjectRollup = getCrossProjectRollup(db, { date });
+  const effortBreakdown = getEffortBreakdown(db, { date });
 
   // Narrative synthesis is additive polish — never let a failure here block
   // brief generation. `client: null` opts out explicitly (used by tests);

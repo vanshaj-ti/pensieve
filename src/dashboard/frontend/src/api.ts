@@ -2,6 +2,7 @@ import type {
   AnalyticsFilter,
   AnalyzeJob,
   CategoryTrendPoint,
+  DateRange,
   DerivedInsight,
   PaginatedSessions,
   SessionProject,
@@ -47,13 +48,18 @@ export const fetchCategoryTrend = (days: number, filter: AnalyticsFilter = {}) =
   );
 
 export const fetchTopInsights = (
-  date: string,
+  range: DateRange | string,
   limit: number,
   offset: number,
   filter: AnalyticsFilter = {},
 ) =>
   fetchJson(
-    `/api/top-insights${buildQuery({ date, limit, offset, ...filter })}`,
+    `/api/top-insights${buildQuery({
+      ...(typeof range === 'string' ? { date: range } : range),
+      limit,
+      offset,
+      ...filter,
+    })}`,
     'top insights',
   ) as Promise<{
     insights: TopInsight[];
@@ -69,9 +75,12 @@ export const fetchRecurrenceChains = (days: number, filter: AnalyticsFilter = {}
     'recurrence chains',
   );
 
-export const fetchCrossProject = (date: string, filter: AnalyticsFilter = {}) =>
+export const fetchCrossProject = (range: DateRange | string, filter: AnalyticsFilter = {}) =>
   fetchJson<ProjectRollup[]>(
-    `/api/cross-project${buildQuery({ date, ...filter })}`,
+    `/api/cross-project${buildQuery({
+      ...(typeof range === 'string' ? { date: range } : range),
+      ...filter,
+    })}`,
     'cross-project rollup',
   );
 
@@ -81,9 +90,12 @@ export const fetchProjectEffortBreakdown = (date: string, filter: AnalyticsFilte
     'project effort breakdown',
   );
 
-export const fetchEffortBreakdown = (date: string, filter: AnalyticsFilter = {}) =>
+export const fetchEffortBreakdown = (range: DateRange | string, filter: AnalyticsFilter = {}) =>
   fetchJson<EffortBreakdown>(
-    `/api/effort-breakdown${buildQuery({ date, ...filter })}`,
+    `/api/effort-breakdown${buildQuery({
+      ...(typeof range === 'string' ? { date: range } : range),
+      ...filter,
+    })}`,
     'effort breakdown',
   );
 
@@ -93,9 +105,12 @@ export const fetchEffortBreakdownTrend = (days: number, filter: AnalyticsFilter 
     'effort breakdown trend',
   );
 
-export const fetchEffortByCategory = (date: string, filter: AnalyticsFilter = {}) =>
+export const fetchEffortByCategory = (range: DateRange | string, filter: AnalyticsFilter = {}) =>
   fetchJson<EffortByCategoryPoint[]>(
-    `/api/effort-by-category${buildQuery({ date, ...filter })}`,
+    `/api/effort-by-category${buildQuery({
+      ...(typeof range === 'string' ? { date: range } : range),
+      ...filter,
+    })}`,
     'effort by category',
   );
 
