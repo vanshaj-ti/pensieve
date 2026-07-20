@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { embedText } from '../src/extract/embeddings.js';
+import { embedText, __resetEmbeddingsWarnStateForTests } from '../src/extract/embeddings.js';
 import { type Config } from '../src/config.js';
 
 describe('embedText', () => {
@@ -19,6 +19,7 @@ describe('embedText', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    __resetEmbeddingsWarnStateForTests();
   });
 
   it('returns null if embeddings not configured', async () => {
@@ -155,5 +156,61 @@ describe('embedText', () => {
       model: 'text-embedding-3-small',
       input: 'test input',
     });
+  });
+
+  it('warns on first HTTP error and suppresses within 5 minute window', async () => {
+    vi.useFakeTimers();
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    // First error: should warn
+    await embedText('test', defaultConfig);
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    expect(errorSpy.mock.calls[0][0]).toContain('Embeddings HTTP error 500');
+
+    // Second error 2 minutes later: should NOT warn (within 5 min window)
+    vi.advanceTimersByTime(2 * 60 * 1000);
+    await embedText('test', defaultConfig);
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+
+    // Third error 4 minutes later (6 min total): should warn again (past 5 min window)
+    vi.advanceTimersByTime(4 * 60 * 1000);
+    await embedText('test', defaultConfig);
+    expect(errorSpy).toHaveBeenCalledTimes(2);
+
+    vi.useRealTimers();
+  });
+
+  it('warns on first parse error and suppresses within 5 minute window', async () => {
+    vi.useFakeTimers();
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: [],
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    // First error: should warn
+    await embedText('test', defaultConfig);
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    expect(errorSpy.mock.calls[0][0]).toContain('Embeddings response schema validation failed');
+
+    // Second error 3 minutes later: should NOT warn (within 5 min window)
+    vi.advanceTimersByTime(3 * 60 * 1000);
+    await embedText('test', defaultConfig);
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+
+    // Third error 3 minutes later (6 min total): should warn again (past 5 min window)
+    vi.advanceTimersByTime(3 * 60 * 1000);
+    await embedText('test', defaultConfig);
+    expect(errorSpy).toHaveBeenCalledTimes(2);
+
+    vi.useRealTimers();
   });
 });
