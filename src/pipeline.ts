@@ -34,6 +34,7 @@ export interface PipelineResult {
   sessionsProcessed: number;
   sessionsFailed: number;
   insightsPersisted: number;
+  episodesFound: number;
   datesTouched: string[];
   label: string;
 }
@@ -68,6 +69,7 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
     sessionsProcessed: 0,
     sessionsFailed: 0,
     insightsPersisted: 0,
+    episodesFound: 0,
     datesTouched: [],
     label,
   };
@@ -93,6 +95,14 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
         draftsByDate.get(draft.date)!.push(draft);
       }
 
+      // Track episode count and dates unconditionally
+      result.episodesFound += drafts.length;
+      for (const date of draftsByDate.keys()) {
+        if (!result.datesTouched.includes(date)) {
+          result.datesTouched.push(date);
+        }
+      }
+
       // Collect extraction results and episode mappings before transaction
       interface ExtractedDay {
         date: string;
@@ -102,35 +112,37 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
 
       const extractedDays: ExtractedDay[] = [];
 
-      // Run extraction for all days (async work outside transaction)
-      for (const [date, dayDrafts] of draftsByDate) {
-        // Build persisted episodes with temp IDs (index)
-        const persistedEpisodes = dayDrafts.map((draft, index) => ({
-          ...draft,
-          id: index,
-        }));
+      // Run extraction for all days only if not dry-run (async work outside transaction)
+      if (!options.dryRun) {
+        for (const [date, dayDrafts] of draftsByDate) {
+          // Build persisted episodes with temp IDs (index)
+          const persistedEpisodes = dayDrafts.map((draft, index) => ({
+            ...draft,
+            id: index,
+          }));
 
-        // Extract all episodes together
-        const allInsights = await runExtraction(persistedEpisodes, db, client);
+          // Extract all episodes together
+          const allInsights = await runExtraction(persistedEpisodes, db, client);
 
-        // Apply embedding-based recurrence detection
-        const insightsWithEmbeddings = await applyEmbeddingRecurrence(allInsights, db, config);
+          // Apply embedding-based recurrence detection
+          const insightsWithEmbeddings = await applyEmbeddingRecurrence(allInsights, db, config);
 
-        // Group insights by their episode ID (which is the temp index)
-        const episodeToInsights = new Map<number, InsightWithEmbedding[]>();
-        for (const item of insightsWithEmbeddings) {
-          const episodeId = item.insight.episodeId;
-          if (!episodeToInsights.has(episodeId)) {
-            episodeToInsights.set(episodeId, []);
+          // Group insights by their episode ID (which is the temp index)
+          const episodeToInsights = new Map<number, InsightWithEmbedding[]>();
+          for (const item of insightsWithEmbeddings) {
+            const episodeId = item.insight.episodeId;
+            if (!episodeToInsights.has(episodeId)) {
+              episodeToInsights.set(episodeId, []);
+            }
+            episodeToInsights.get(episodeId)!.push(item);
           }
-          episodeToInsights.get(episodeId)!.push(item);
-        }
 
-        extractedDays.push({
-          date,
-          drafts: dayDrafts,
-          episodeToInsights,
-        });
+          extractedDays.push({
+            date,
+            drafts: dayDrafts,
+            episodeToInsights,
+          });
+        }
       }
 
       // Wrap all DB writes in a single transaction
@@ -212,15 +224,6 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
           }, 0);
 
       result.insightsPersisted += sessionInserts;
-
-      // Track dates for dry-run
-      if (options.dryRun) {
-        for (const day of extractedDays) {
-          if (!result.datesTouched.includes(day.date)) {
-            result.datesTouched.push(day.date);
-          }
-        }
-      }
 
       // Only advance cursor after successful persistence
       if (!options.dryRun) {
