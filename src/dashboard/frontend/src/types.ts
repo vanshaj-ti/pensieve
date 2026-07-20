@@ -153,6 +153,15 @@ export interface AnalyzeJob {
   error?: string;
 }
 
+export interface BriefListResponse {
+  dates: string[];
+}
+
+export interface BriefDetailResponse {
+  date: string;
+  content: string;
+}
+
 export interface PaginatedTopInsights {
   insights: TopInsight[];
   total: number;

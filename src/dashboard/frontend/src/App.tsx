@@ -2,6 +2,8 @@ import { useRoute, type Route } from './hooks/useRoute';
 import { AnalyticsPage } from './pages/AnalyticsPage';
 import { SessionsPage } from './pages/SessionsPage';
 import { SessionDetailPage } from './pages/SessionDetailPage';
+import { BriefsPage } from './pages/BriefsPage';
+import { BriefDetailPage } from './pages/BriefDetailPage';
 import type { AnalyticsFilter } from './types';
 
 function routeToFilter(route: Route): AnalyticsFilter {
@@ -10,6 +12,8 @@ function routeToFilter(route: Route): AnalyticsFilter {
     case 'projects':
     case 'projects-detail':
     case 'session-detail':
+    case 'briefs':
+    case 'brief-detail':
       return {};
     case 'project':
       return { projectDir: route.projectDir };
@@ -40,6 +44,10 @@ function routeScopeLabel(route: Route): string {
       return route.projectDir;
     case 'session-detail':
       return `${route.projectDir} · ${route.sessionId}`;
+    case 'briefs':
+      return 'Briefs';
+    case 'brief-detail':
+      return route.date;
   }
 }
 
@@ -106,6 +114,13 @@ function buildCrumbs(route: Route): Crumb[] {
     case 'label':
       crumbs.push({ label: `Run: ${route.label}` });
       break;
+    case 'briefs':
+      crumbs.push({ label: 'Briefs' });
+      break;
+    case 'brief-detail':
+      crumbs.push({ label: 'Briefs', route: { kind: 'briefs' } });
+      crumbs.push({ label: route.date });
+      break;
   }
 
   return crumbs;
@@ -122,6 +137,52 @@ export function App() {
           <h1>Pensieve</h1>
           <p>Daily insight analytics</p>
         </div>
+        <nav style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
+          <button
+            onClick={() => setRoute({ kind: 'holistic' })}
+            style={{
+              padding: '6px 12px',
+              background: route.kind === 'holistic' ? '#007acc' : '#f0f0f0',
+              color: route.kind === 'holistic' ? 'white' : 'inherit',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+            }}
+          >
+            Analytics
+          </button>
+          <button
+            onClick={() => setRoute({ kind: 'projects' })}
+            style={{
+              padding: '6px 12px',
+              background:
+                route.kind === 'projects' || route.kind === 'projects-detail'
+                  ? '#007acc'
+                  : '#f0f0f0',
+              color:
+                route.kind === 'projects' || route.kind === 'projects-detail' ? 'white' : 'inherit',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+            }}
+          >
+            Sessions
+          </button>
+          <button
+            onClick={() => setRoute({ kind: 'briefs' })}
+            style={{
+              padding: '6px 12px',
+              background:
+                route.kind === 'briefs' || route.kind === 'brief-detail' ? '#007acc' : '#f0f0f0',
+              color: route.kind === 'briefs' || route.kind === 'brief-detail' ? 'white' : 'inherit',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+            }}
+          >
+            Briefs
+          </button>
+        </nav>
       </header>
 
       <nav className="breadcrumb">
@@ -149,6 +210,10 @@ export function App() {
           sessionId={route.sessionId}
           onNavigate={setRoute}
         />
+      ) : route.kind === 'briefs' ? (
+        <BriefsPage onNavigate={setRoute} />
+      ) : route.kind === 'brief-detail' ? (
+        <BriefDetailPage date={route.date} onNavigate={setRoute} />
       ) : (
         <AnalyticsPage
           filter={routeToFilter(route)}
