@@ -169,3 +169,12 @@ export interface PaginatedTopInsights {
   limit: number;
   offset: number;
 }
+
+export interface SearchResult {
+  type: 'project' | 'session' | 'insight';
+  projectDir: string;
+  sessionId?: string;
+  label?: string;
+  insightId?: number;
+  text: string;
+}

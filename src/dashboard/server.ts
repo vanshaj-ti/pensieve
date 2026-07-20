@@ -29,6 +29,7 @@ import {
   getWorkItemsForRun,
   insertDerivedInsights,
   getDerivedInsights,
+  search,
   type AnalyticsFilter,
 } from '../analytics/index.js';
 
@@ -263,6 +264,22 @@ export function createDashboardServer(config: Config): Application {
       res.json(getLabels(db));
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch labels' });
+    }
+  });
+
+  app.get('/api/search', (req: Request, res: Response) => {
+    try {
+      const q = ((req.query.q as string) || '').trim();
+      if (!q) return res.json([]);
+      const limit = parsePositiveInt(req.query.limit as string, 20);
+      if (limit === null) {
+        return res
+          .status(400)
+          .json({ error: 'Invalid limit parameter: must be a positive integer' });
+      }
+      res.json(search(db, q, Math.min(limit, 20)));
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to search' });
     }
   });
 
