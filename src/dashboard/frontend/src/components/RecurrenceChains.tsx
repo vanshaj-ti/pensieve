@@ -9,6 +9,7 @@ interface Props {
 export function RecurrenceChains({ chains }: Props) {
   const [selectedCategories, setSelectedCategories] = useState<InsightCategory[]>([]);
   const [selectedEfforts, setSelectedEfforts] = useState<EffortClass[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const toggleCategory = (category: InsightCategory) => {
     setSelectedCategories((prev) =>
@@ -26,23 +27,34 @@ export function RecurrenceChains({ chains }: Props) {
     return <div className="empty-state">No recurring patterns found.</div>;
   }
 
+  const query = searchQuery.trim().toLowerCase();
   const filtered = chains.filter((chain) => {
     const firstInsight = chain.insights[0];
     return (
       (selectedCategories.length === 0 || selectedCategories.includes(firstInsight.category)) &&
-      (selectedEfforts.length === 0 || selectedEfforts.includes(firstInsight.effortClass))
+      (selectedEfforts.length === 0 || selectedEfforts.includes(firstInsight.effortClass)) &&
+      (query === '' || chain.insights.some((i) => i.text.toLowerCase().includes(query)))
     );
   });
 
   if (filtered.length === 0) {
     return (
       <>
-        <CategoryEffortFilter
-          selectedCategories={selectedCategories}
-          selectedEfforts={selectedEfforts}
-          onToggleCategory={toggleCategory}
-          onToggleEffort={toggleEffort}
-        />
+        <div className="sort-controls">
+          <input
+            type="search"
+            className="search-box"
+            placeholder="Search insight text…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          <CategoryEffortFilter
+            selectedCategories={selectedCategories}
+            selectedEfforts={selectedEfforts}
+            onToggleCategory={toggleCategory}
+            onToggleEffort={toggleEffort}
+          />
+        </div>
         <div className="empty-state">No recurring patterns match the selected filters.</div>
       </>
     );
@@ -50,12 +62,21 @@ export function RecurrenceChains({ chains }: Props) {
 
   return (
     <>
-      <CategoryEffortFilter
-        selectedCategories={selectedCategories}
-        selectedEfforts={selectedEfforts}
-        onToggleCategory={toggleCategory}
-        onToggleEffort={toggleEffort}
-      />
+      <div className="sort-controls">
+        <input
+          type="search"
+          className="search-box"
+          placeholder="Search insight text…"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+        <CategoryEffortFilter
+          selectedCategories={selectedCategories}
+          selectedEfforts={selectedEfforts}
+          onToggleCategory={toggleCategory}
+          onToggleEffort={toggleEffort}
+        />
+      </div>
       <ul className="insight-list">
         {filtered.map((chain) => {
           const firstInsight = chain.insights[0];

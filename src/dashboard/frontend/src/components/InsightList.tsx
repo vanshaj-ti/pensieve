@@ -24,15 +24,18 @@ export function InsightList({ insights, onLabelSaved }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>('significance');
   const [selectedCategories, setSelectedCategories] = useState<InsightCategory[]>([]);
   const [selectedEfforts, setSelectedEfforts] = useState<EffortClass[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
 
   if (insights.length === 0) {
     return <div className="empty-state">No insights for this scope.</div>;
   }
 
+  const query = searchQuery.trim().toLowerCase();
   const filtered = insights.filter(
     (insight) =>
       (selectedCategories.length === 0 || selectedCategories.includes(insight.category)) &&
-      (selectedEfforts.length === 0 || selectedEfforts.includes(insight.effortClass)),
+      (selectedEfforts.length === 0 || selectedEfforts.includes(insight.effortClass)) &&
+      (query === '' || insight.text.toLowerCase().includes(query)),
   );
 
   const toggleCategory = (category: InsightCategory) => {
@@ -50,12 +53,21 @@ export function InsightList({ insights, onLabelSaved }: Props) {
   if (filtered.length === 0 && insights.length > 0) {
     return (
       <>
-        <CategoryEffortFilter
-          selectedCategories={selectedCategories}
-          selectedEfforts={selectedEfforts}
-          onToggleCategory={toggleCategory}
-          onToggleEffort={toggleEffort}
-        />
+        <div className="sort-controls">
+          <input
+            type="search"
+            className="search-box"
+            placeholder="Search insight text…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          <CategoryEffortFilter
+            selectedCategories={selectedCategories}
+            selectedEfforts={selectedEfforts}
+            onToggleCategory={toggleCategory}
+            onToggleEffort={toggleEffort}
+          />
+        </div>
         <div className="empty-state">No insights match the selected filters.</div>
       </>
     );
@@ -69,12 +81,21 @@ export function InsightList({ insights, onLabelSaved }: Props) {
 
   return (
     <>
-      <CategoryEffortFilter
-        selectedCategories={selectedCategories}
-        selectedEfforts={selectedEfforts}
-        onToggleCategory={toggleCategory}
-        onToggleEffort={toggleEffort}
-      />
+      <div className="sort-controls">
+        <input
+          type="search"
+          className="search-box"
+          placeholder="Search insight text…"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+        <CategoryEffortFilter
+          selectedCategories={selectedCategories}
+          selectedEfforts={selectedEfforts}
+          onToggleCategory={toggleCategory}
+          onToggleEffort={toggleEffort}
+        />
+      </div>
       <div className="sort-controls">
         {(['significance', 'category', 'effort'] as SortKey[]).map((key) => (
           <button
