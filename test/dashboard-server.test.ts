@@ -135,7 +135,9 @@ describe('dashboard server', () => {
       expect(apiData).toHaveProperty('totalPages');
       expect(apiData).toHaveProperty('limit');
       expect(apiData).toHaveProperty('offset');
-      expect(apiData.insights).toEqual(getTopInsights(dbForAnalytics, date, limit, undefined, 0));
+      expect(apiData.insights).toEqual(
+        getTopInsights(dbForAnalytics, { date }, limit, undefined, 0),
+      );
     });
 
     it('returns 400 for missing date', async () => {
@@ -168,8 +170,10 @@ describe('dashboard server', () => {
       expect(page2Res.status).toBe(200);
       const page1 = await page1Res.json();
       const page2 = await page2Res.json();
-      expect(page1.insights).toEqual(getTopInsights(dbForAnalytics, date, limit, undefined, 0));
-      expect(page2.insights).toEqual(getTopInsights(dbForAnalytics, date, limit, undefined, limit));
+      expect(page1.insights).toEqual(getTopInsights(dbForAnalytics, { date }, limit, undefined, 0));
+      expect(page2.insights).toEqual(
+        getTopInsights(dbForAnalytics, { date }, limit, undefined, limit),
+      );
     });
 
     it('returns 400 for invalid offset (negative)', async () => {
@@ -194,10 +198,34 @@ describe('dashboard server', () => {
       );
       expect(res.status).toBe(200);
       const apiData = await res.json();
-      const expectedTotal = getTopInsightsCount(dbForAnalytics, date);
+      const expectedTotal = getTopInsightsCount(dbForAnalytics, { date });
       const expectedTotalPages = Math.max(1, Math.ceil(expectedTotal / limit));
       expect(apiData.total).toBe(expectedTotal);
       expect(apiData.totalPages).toBe(expectedTotalPages);
+    });
+
+    it('accepts fromDate/toDate range params', async () => {
+      const res = await fetch(
+        `http://localhost:${port}/api/top-insights?fromDate=2026-07-15&toDate=2026-07-16&limit=10`,
+      );
+      expect(res.status).toBe(200);
+      const apiData = await res.json();
+      expect(apiData).toHaveProperty('insights');
+      expect(Array.isArray(apiData.insights)).toBe(true);
+    });
+
+    it('returns 400 when fromDate is provided without toDate', async () => {
+      const res = await fetch(
+        `http://localhost:${port}/api/top-insights?fromDate=2026-07-15&limit=10`,
+      );
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 400 when fromDate > toDate', async () => {
+      const res = await fetch(
+        `http://localhost:${port}/api/top-insights?fromDate=2026-07-16&toDate=2026-07-15&limit=10`,
+      );
+      expect(res.status).toBe(400);
     });
   });
 
@@ -207,13 +235,22 @@ describe('dashboard server', () => {
       const res = await fetch(`http://localhost:${port}/api/effort-breakdown?date=${date}`);
       expect(res.status).toBe(200);
       const apiData = await res.json();
-      const expected = getEffortBreakdown(dbForAnalytics, date);
+      const expected = getEffortBreakdown(dbForAnalytics, { date });
       expect(apiData).toEqual(expected);
     });
 
     it('returns 400 for missing date', async () => {
       const res = await fetch(`http://localhost:${port}/api/effort-breakdown`);
       expect(res.status).toBe(400);
+    });
+
+    it('accepts fromDate/toDate range params', async () => {
+      const res = await fetch(
+        `http://localhost:${port}/api/effort-breakdown?fromDate=2026-07-15&toDate=2026-07-16`,
+      );
+      expect(res.status).toBe(200);
+      const apiData = await res.json();
+      expect(apiData).toHaveProperty('total');
     });
   });
 
@@ -239,13 +276,22 @@ describe('dashboard server', () => {
       const res = await fetch(`http://localhost:${port}/api/cross-project?date=${date}`);
       expect(res.status).toBe(200);
       const apiData = await res.json();
-      const expected = getCrossProjectRollup(dbForAnalytics, date);
+      const expected = getCrossProjectRollup(dbForAnalytics, { date });
       expect(apiData).toEqual(expected);
     });
 
     it('returns 400 for missing date', async () => {
       const res = await fetch(`http://localhost:${port}/api/cross-project`);
       expect(res.status).toBe(400);
+    });
+
+    it('accepts fromDate/toDate range params', async () => {
+      const res = await fetch(
+        `http://localhost:${port}/api/cross-project?fromDate=2026-07-15&toDate=2026-07-16`,
+      );
+      expect(res.status).toBe(200);
+      const apiData = await res.json();
+      expect(Array.isArray(apiData)).toBe(true);
     });
   });
 
@@ -349,7 +395,7 @@ describe('dashboard server', () => {
       const apiData = await res.json();
       const expected = getTopInsights(
         dbForAnalytics,
-        '2026-07-15',
+        { date: '2026-07-15' },
         10,
         {
           projectDir: '/project-b',
@@ -366,13 +412,22 @@ describe('dashboard server', () => {
       const res = await fetch(`http://localhost:${port}/api/effort-by-category?date=${date}`);
       expect(res.status).toBe(200);
       const apiData = await res.json();
-      const expected = getEffortByCategory(dbForAnalytics, date);
+      const expected = getEffortByCategory(dbForAnalytics, { date });
       expect(apiData).toEqual(expected);
     });
 
     it('returns 400 for missing date', async () => {
       const res = await fetch(`http://localhost:${port}/api/effort-by-category`);
       expect(res.status).toBe(400);
+    });
+
+    it('accepts fromDate/toDate range params', async () => {
+      const res = await fetch(
+        `http://localhost:${port}/api/effort-by-category?fromDate=2026-07-15&toDate=2026-07-16`,
+      );
+      expect(res.status).toBe(200);
+      const apiData = await res.json();
+      expect(Array.isArray(apiData)).toBe(true);
     });
   });
 

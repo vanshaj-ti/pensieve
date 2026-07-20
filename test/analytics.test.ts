@@ -83,7 +83,7 @@ describe('analytics', () => {
 
   describe('getTopInsights', () => {
     it('returns empty array for date with no insights', () => {
-      const result = getTopInsights(db, '2026-07-15', 5);
+      const result = getTopInsights(db, { date: '2026-07-15' }, 5);
       expect(result).toEqual([]);
     });
 
@@ -104,7 +104,7 @@ describe('analytics', () => {
       `,
       ).run();
 
-      const result = getTopInsights(db, '2026-07-15', 5);
+      const result = getTopInsights(db, { date: '2026-07-15' }, 5);
 
       expect(result).toHaveLength(3);
       expect(result[0]?.text).toBe('High score');
@@ -130,7 +130,7 @@ describe('analytics', () => {
         ).run(`Insight ${i}`, `ref${i}`, 0.5 + i * 0.01);
       }
 
-      const result = getTopInsights(db, '2026-07-15', 3);
+      const result = getTopInsights(db, { date: '2026-07-15' }, 3);
       expect(result).toHaveLength(3);
     });
 
@@ -149,7 +149,7 @@ describe('analytics', () => {
       `,
       ).run();
 
-      const result = getTopInsights(db, '2026-07-15', 5);
+      const result = getTopInsights(db, { date: '2026-07-15' }, 5);
 
       expect(result).toHaveLength(1);
       expect(result[0]?.projectDir).toBe('/home/user/project');
@@ -172,8 +172,8 @@ describe('analytics', () => {
         ).run(`Insight ${i}`, `ref${i}`, 0.5 + i * 0.1);
       }
 
-      const page1 = getTopInsights(db, '2026-07-15', 2, undefined, 0);
-      const page2 = getTopInsights(db, '2026-07-15', 2, undefined, 2);
+      const page1 = getTopInsights(db, { date: '2026-07-15' }, 2, undefined, 0);
+      const page2 = getTopInsights(db, { date: '2026-07-15' }, 2, undefined, 2);
 
       expect(page1).toHaveLength(2);
       expect(page2).toHaveLength(2);
@@ -184,7 +184,7 @@ describe('analytics', () => {
 
   describe('getTopInsightsCount', () => {
     it('returns 0 for date with no insights', () => {
-      const count = getTopInsightsCount(db, '2026-07-15');
+      const count = getTopInsightsCount(db, { date: '2026-07-15' });
       expect(count).toBe(0);
     });
 
@@ -205,7 +205,7 @@ describe('analytics', () => {
         ).run(`Insight ${i}`, `ref${i}`, 0.5 + i * 0.1);
       }
 
-      const count = getTopInsightsCount(db, '2026-07-15');
+      const count = getTopInsightsCount(db, { date: '2026-07-15' });
       expect(count).toBe(5);
     });
 
@@ -226,7 +226,7 @@ describe('analytics', () => {
       `,
       ).run();
 
-      const countA = getTopInsightsCount(db, '2026-07-15', { projectDir: '/project-a' });
+      const countA = getTopInsightsCount(db, { date: '2026-07-15' }, { projectDir: '/project-a' });
       expect(countA).toBe(1);
     });
   });
@@ -586,7 +586,7 @@ describe('analytics', () => {
       `,
       ).run();
 
-      const result = getCrossProjectRollup(db, '2026-07-15');
+      const result = getCrossProjectRollup(db, { date: '2026-07-15' });
 
       expect(result).toHaveLength(1);
       expect(result[0]).toEqual({ projectDir: '/home/user/project', insightCount: 1 });
@@ -613,7 +613,7 @@ describe('analytics', () => {
       `,
       ).run();
 
-      const result = getCrossProjectRollup(db, '2026-07-15');
+      const result = getCrossProjectRollup(db, { date: '2026-07-15' });
 
       expect(result).toHaveLength(3);
       // Sorted by count DESC: project2 has 3, project1 and project3 each have 1
@@ -747,7 +747,7 @@ describe('analytics', () => {
 
   describe('getEffortBreakdown', () => {
     it('returns all-zero breakdown for a date with no insights', () => {
-      const result = getEffortBreakdown(db, '2026-07-15');
+      const result = getEffortBreakdown(db, { date: '2026-07-15' });
       expect(result).toEqual({
         toil: 0,
         judgment: 0,
@@ -777,7 +777,7 @@ describe('analytics', () => {
       `,
       ).run();
 
-      const result = getEffortBreakdown(db, '2026-07-15');
+      const result = getEffortBreakdown(db, { date: '2026-07-15' });
       expect(result.toil).toBe(2);
       expect(result.judgment).toBe(1);
       expect(result.overhead).toBe(1);
@@ -804,7 +804,7 @@ describe('analytics', () => {
       `,
       ).run();
 
-      const result = getEffortBreakdown(db, '2026-07-15');
+      const result = getEffortBreakdown(db, { date: '2026-07-15' });
       expect(result.total).toBe(1);
       expect(result.toil).toBe(1);
       expect(result.judgment).toBe(0);
@@ -827,7 +827,7 @@ describe('analytics', () => {
       `,
       ).run();
 
-      const result = getEffortBreakdown(db, '2026-07-15');
+      const result = getEffortBreakdown(db, { date: '2026-07-15' });
       expect(result.judgment).toBe(1);
       expect(result.toil).toBe(0);
       expect(result.overhead).toBe(0);
@@ -863,20 +863,20 @@ describe('analytics', () => {
     });
 
     it('getTopInsights scopes to a project', () => {
-      const result = getTopInsights(db, '2026-07-15', 10, { projectDir: '/project-b' });
+      const result = getTopInsights(db, { date: '2026-07-15' }, 10, { projectDir: '/project-b' });
       expect(result).toHaveLength(1);
       expect(result[0].text).toBe('From run-b');
     });
 
     it('getEffortBreakdown scopes to a session', () => {
-      const result = getEffortBreakdown(db, '2026-07-15', { sessionId: 'session-1' });
+      const result = getEffortBreakdown(db, { date: '2026-07-15' }, { sessionId: 'session-1' });
       expect(result.total).toBe(1);
       expect(result.judgment).toBe(1);
       expect(result.toil).toBe(0);
     });
 
     it('combines label + project filters', () => {
-      const result = getTopInsights(db, '2026-07-15', 10, {
+      const result = getTopInsights(db, { date: '2026-07-15' }, 10, {
         label: 'run-a',
         projectDir: '/project-b',
       });
@@ -958,7 +958,7 @@ describe('analytics', () => {
 
   describe('getEffortByCategory', () => {
     it('returns empty array for a date with no insights', () => {
-      const result = getEffortByCategory(db, '2026-07-15');
+      const result = getEffortByCategory(db, { date: '2026-07-15' });
       expect(result).toEqual([]);
     });
 
@@ -981,7 +981,7 @@ describe('analytics', () => {
       `,
       ).run();
 
-      const result = getEffortByCategory(db, '2026-07-15');
+      const result = getEffortByCategory(db, { date: '2026-07-15' });
       expect(result).toEqual([
         { category: 'friction_audit', toil: 2, judgment: 1, overhead: 0, total: 3 },
         { category: 'exploration', toil: 0, judgment: 0, overhead: 1, total: 1 },
@@ -1007,7 +1007,7 @@ describe('analytics', () => {
       `,
       ).run();
 
-      const result = getEffortByCategory(db, '2026-07-15', { label: 'run-a' });
+      const result = getEffortByCategory(db, { date: '2026-07-15' }, { label: 'run-a' });
       expect(result).toEqual([
         { category: 'friction_audit', toil: 1, judgment: 0, overhead: 0, total: 1 },
       ]);

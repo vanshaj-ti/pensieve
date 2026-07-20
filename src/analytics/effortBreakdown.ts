@@ -1,5 +1,11 @@
 import type Database from 'better-sqlite3';
-import { localDateKey, buildFilterClause, type AnalyticsFilter } from './shared.js';
+import {
+  localDateKey,
+  buildFilterClause,
+  buildDateClause,
+  type AnalyticsFilter,
+  type DateRange,
+} from './shared.js';
 
 export interface EffortBreakdown {
   toil: number;
@@ -25,9 +31,10 @@ export interface EffortBreakdownTrendPoint extends EffortBreakdown {
  */
 export function getEffortBreakdown(
   db: Database.Database,
-  date: string,
+  range: DateRange,
   filter?: AnalyticsFilter,
 ): EffortBreakdown {
+  const { sql: dateSql, params: dateParams } = buildDateClause(range);
   const { sql: filterSql, params: filterParams } = buildFilterClause(filter);
 
   const rows = db
@@ -36,11 +43,11 @@ export function getEffortBreakdown(
     SELECT i.effort_class, COUNT(*) as count
     FROM insights i
     JOIN episodes e ON i.episode_id = e.id
-    WHERE e.date = ?${filterSql}
+    WHERE ${dateSql}${filterSql}
     GROUP BY i.effort_class
   `,
     )
-    .all(date, ...filterParams) as Array<{ effort_class: string; count: number }>;
+    .all(...dateParams, ...filterParams) as Array<{ effort_class: string; count: number }>;
 
   const counts = { toil: 0, judgment: 0, overhead: 0 };
   for (const row of rows) {
