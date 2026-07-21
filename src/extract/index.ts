@@ -2,8 +2,14 @@ import type Database from 'better-sqlite3';
 import type Anthropic from '@anthropic-ai/sdk';
 import type { EpisodeDraft } from '../chunk/episodes.js';
 import type { Insight } from '../types.js';
+import type { Config } from '../config.js';
 import { generateCandidates, HaikuExtractionError } from './haiku.js';
-import { verifyAndScore, getRecentInsights, type CandidateWithSource } from './sonnet.js';
+import {
+  verifyAndScore,
+  getRecentInsights,
+  SonnetVerificationError,
+  type CandidateWithSource,
+} from './sonnet.js';
 
 export type PersistedEpisode = EpisodeDraft & { id: number };
 
@@ -33,7 +39,7 @@ const SONNET_CONCURRENCY = 3;
  * a fixed-size pool of workers, each pulling the next unclaimed index until
  * the queue is exhausted.
  */
-async function mapWithConcurrency<T, R>(
+export async function mapWithConcurrency<T, R>(
   items: T[],
   concurrency: number,
   fn: (item: T, index: number) => Promise<R>,
@@ -60,6 +66,7 @@ export async function runExtraction(
   episodes: PersistedEpisode[],
   db: Database.Database,
   client: Anthropic,
+  config: Config,
 ): Promise<Insight[]> {
   // Each episode independently produces either its candidates or `null`
   // (HaikuExtractionError — logged and skipped, matching the prior
@@ -102,16 +109,23 @@ export async function runExtraction(
     return [];
   }
 
-  const recentHistory = getRecentInsights(db, 7);
+  const recentHistory = getRecentInsights(db, config.recentHistoryDays);
 
   const batches: CandidateWithSource[][] = [];
   for (let i = 0; i < allCandidatesWithSource.length; i += SONNET_BATCH_SIZE) {
     batches.push(allCandidatesWithSource.slice(i, i + SONNET_BATCH_SIZE));
   }
 
-  const batchResults = await mapWithConcurrency(batches, SONNET_CONCURRENCY, (batch) =>
-    verifyAndScore(batch, recentHistory, client),
-  );
+  const batchResults = await mapWithConcurrency(batches, SONNET_CONCURRENCY, async (batch) => {
+    try {
+      return await verifyAndScore(batch, recentHistory, client);
+    } catch (error) {
+      if (error instanceof SonnetVerificationError) {
+        return [];
+      }
+      throw error;
+    }
+  });
 
   return batchResults.flat();
 }
