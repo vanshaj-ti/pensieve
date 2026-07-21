@@ -96,6 +96,52 @@ export const InsightSchema = z.object({
 });
 export type Insight = z.infer<typeof InsightSchema>;
 
+/**
+ * What a human turn contributed, classified against the agent turn that
+ * preceded it — not what category of work the agent did (see
+ * InsightCategory), a separate axis entirely.
+ * - directive: babysitting — imperative micromanagement ("run the tests",
+ *   "edit file X"), or the human doing a step manually that the agent
+ *   already had the tools/permission to do itself.
+ * - deliberative: good engagement — reasoning, tradeoffs, decisions,
+ *   domain/business context the agent can't derive on its own, answering
+ *   a genuine agent question, research direction.
+ * - corrective: good but a cost signal — the human catches a real agent
+ *   mistake. Tracked separately from deliberative since high volume here
+ *   means agent quality is the problem, not engagement style.
+ * - acknowledgment: low-content noise ("yes"/"continue"/"lgtm") — filtered
+ *   out of the babysitting-vs-good-engagement ratio entirely.
+ */
+export const EngagementClassification = z.enum([
+  'directive',
+  'deliberative',
+  'corrective',
+  'acknowledgment',
+]);
+export type EngagementClassification = z.infer<typeof EngagementClassification>;
+
+/** Haiku engagement-classification pass output, one per turn pair. */
+export const EngagementCandidateSchema = z.object({
+  humanLineNumber: z.number(),
+  classification: EngagementClassification,
+  /** Only meaningful when classification is 'directive': was this a
+   * necessary gate (agent was genuinely blocked, or the action is
+   * irreversible and a human check-in is correct) rather than habitual
+   * micromanagement? Null for every other classification. */
+  directiveNecessary: z.boolean().nullable(),
+  /** One-line note on what this reveals — e.g. "ran tests manually, agent
+   * already had shell access" — surfaced directly in the brief so a
+   * flagged directive turn is actionable, not just a count. */
+  reason: z.string(),
+});
+export type EngagementCandidate = z.infer<typeof EngagementCandidateSchema>;
+
+export interface EngagementTurn extends EngagementCandidate {
+  id?: number;
+  episodeId: number;
+  createdAt: string;
+}
+
 /** OpenAI-compatible embeddings response. */
 export const EmbeddingResponseSchema = z.object({
   data: z.array(z.object({ embedding: z.array(z.number()), index: z.number() })).min(1),

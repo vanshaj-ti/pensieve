@@ -7,6 +7,7 @@ import { openDb } from '../src/db/schema.js';
 import { getCursor } from '../src/ingest/cursor.js';
 import type { ScanResult } from '../src/ingest/index.js';
 import type { Insight } from '../src/types.js';
+import type Anthropic from '@anthropic-ai/sdk';
 
 vi.mock('../src/ingest/index.js');
 vi.mock('../src/extract/index.js');
@@ -524,6 +525,116 @@ describe('pipeline', () => {
       count: number;
     };
     expect(count.count).toBe(0);
+  });
+
+  it('engagement analysis: persists engagement_turns rows including directiveNecessary=false without throwing (regression for boolean-bind bug)', async () => {
+    // Real bug found live: better-sqlite3 rejects a raw JS boolean bound
+    // param ("SQLite3 can only bind numbers, strings, bigints, buffers, and
+    // null") — insights.verified_by_git never exercised this since it's a
+    // dormant field always left null. This exercises directiveNecessary
+    // with real true/false values through the actual insert.
+    const now = new Date().toISOString();
+    const scanResult: ScanResult = {
+      projectDir: '/tmp/test-project',
+      sessionId: 'session-1',
+      filePath: '/tmp/test-project/session-1.jsonl',
+      lines: [
+        {
+          lineNumber: 1,
+          type: 'assistant',
+          timestamp: now,
+          hasToolUse: false,
+          raw: {
+            type: 'assistant',
+            timestamp: now,
+            message: { content: [{ type: 'text', text: 'Should I use approach A or B?' }] },
+          },
+        },
+        {
+          lineNumber: 2,
+          type: 'user',
+          timestamp: now,
+          hasToolUse: false,
+          raw: { type: 'user', timestamp: now, message: { content: 'Use approach B.' } },
+        },
+        {
+          lineNumber: 3,
+          type: 'assistant',
+          timestamp: now,
+          hasToolUse: true,
+          raw: {
+            type: 'assistant',
+            timestamp: now,
+            message: {
+              content: [
+                { type: 'text', text: 'Implemented approach B.' },
+                { type: 'tool_use', name: 'bash', input: { command: 'npm test' } },
+              ],
+            },
+          },
+        },
+        {
+          lineNumber: 4,
+          type: 'user',
+          timestamp: now,
+          hasToolUse: false,
+          raw: { type: 'user', timestamp: now, message: { content: 'run the tests again' } },
+        },
+      ],
+      maxLineNumber: 100,
+    };
+
+    const insights: Insight[] = [];
+
+    const { scanNewLines } = await import('../src/ingest/index.js');
+    const { runExtraction } = await import('../src/extract/index.js');
+
+    vi.mocked(scanNewLines).mockResolvedValueOnce([scanResult]);
+    vi.mocked(runExtraction).mockResolvedValueOnce(insights);
+
+    const mockCreate = vi.fn().mockResolvedValueOnce({
+      content: [
+        {
+          type: 'tool_use',
+          name: 'emit_engagement_classifications',
+          input: {
+            candidates: [
+              {
+                humanLineNumber: 2,
+                classification: 'deliberative',
+                directiveNecessary: null,
+                reason: 'resolved the agent question with a concrete choice',
+              },
+              {
+                humanLineNumber: 4,
+                classification: 'directive',
+                directiveNecessary: false,
+                reason: 'told agent to re-run tests it already had access to run itself',
+              },
+            ],
+          },
+        },
+      ],
+    });
+    const client = {
+      beta: { promptCaching: { messages: { create: mockCreate } } },
+    } as unknown as Anthropic;
+
+    await runDailyAnalysis({
+      db,
+      force: false,
+      client,
+    });
+
+    const rows = db
+      .prepare(
+        'SELECT classification, directive_necessary FROM engagement_turns ORDER BY human_line_number',
+      )
+      .all() as Array<{ classification: string; directive_necessary: number | null }>;
+    expect(rows).toEqual([
+      { classification: 'deliberative', directive_necessary: null },
+      { classification: 'directive', directive_necessary: 0 },
+    ]);
   });
 
   describe('run labeling', () => {

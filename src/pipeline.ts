@@ -7,6 +7,7 @@ import { advanceCursor } from './ingest/cursor.js';
 import { chunkSession } from './chunk/index.js';
 import { runExtraction } from './extract/index.js';
 import { applyEmbeddingRecurrence, type InsightWithEmbedding } from './extract/recurrence.js';
+import { runEngagementAnalysis, type PersistedEngagementTurn } from './engagement/index.js';
 import { InsightSchema } from './types.js';
 
 export interface PipelineOptions {
@@ -122,9 +123,27 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
             id: index,
           }));
 
-          // Extract all episodes in this date batch together (only if not dry-run)
+          // Extract all episodes in this date batch together (only if not
+          // dry-run). Engagement analysis (babysitting vs good-engagement
+          // classification of human turns) is an independent concern from
+          // work-item extraction — runs concurrently, not gated by or
+          // gating it, and a failure here must not fail the date-batch's
+          // insight extraction (see runEngagementAnalysis's own
+          // per-episode error isolation).
           if (!options.dryRun) {
-            const allInsights = await runExtraction(persistedEpisodes, db, client, config);
+            const [allInsights, engagementTurns] = await Promise.all([
+              runExtraction(persistedEpisodes, db, client, config),
+              runEngagementAnalysis(persistedEpisodes, db, client, {
+                briefsDir: config.briefsDir,
+                label,
+              }).catch((error) => {
+                console.error(
+                  `Engagement analysis failed for date ${date} in session ${scanResult.sessionId}, continuing without it:`,
+                  error instanceof Error ? error.message : String(error),
+                );
+                return [] as PersistedEngagementTurn[];
+              }),
+            ]);
 
             // Apply embedding-based recurrence detection
             const insightsWithEmbeddings = await applyEmbeddingRecurrence(allInsights, db, config);
@@ -139,7 +158,8 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
               episodeToInsights.get(episodeId)!.push(item);
             }
 
-            // Commit this date's episodes + insights in its own transaction
+            // Commit this date's episodes + insights + engagement turns in
+            // its own transaction
             const dayInserts = db.transaction(() => {
               let insightInserts = 0;
               const insertEpisode = db.prepare(`
@@ -153,6 +173,10 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
               const insertEmbedding = db.prepare(`
                 INSERT INTO insight_embeddings (insight_id, embedding, model, created_at)
                 VALUES (?, ?, ?, ?)
+              `);
+              const insertEngagementTurn = db.prepare(`
+                INSERT INTO engagement_turns (episode_id, human_line_number, classification, directive_necessary, reason, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
               `);
 
               // Insert all episodes and map temp IDs to real IDs
@@ -197,6 +221,27 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
                     );
                   }
                 }
+              }
+
+              // Insert engagement turns using the same temp-to-real episode
+              // ID mapping just built above for insights — same episodes,
+              // independent table.
+              for (const turn of engagementTurns) {
+                const realEpisodeId = tempToRealId.get(turn.episodeId) ?? 0;
+                insertEngagementTurn.run(
+                  realEpisodeId,
+                  turn.humanLineNumber,
+                  turn.classification,
+                  // better-sqlite3 only binds numbers/strings/bigints/
+                  // buffers/null — a raw JS boolean throws
+                  // "SQLite3 can only bind numbers, strings, bigints,
+                  // buffers, and null" (real bug, hit live on a full
+                  // analyze run). insights.verified_by_git never surfaced
+                  // this since it's a dormant field always left null.
+                  turn.directiveNecessary === null ? null : turn.directiveNecessary ? 1 : 0,
+                  turn.reason,
+                  new Date().toISOString(),
+                );
               }
 
               return insightInserts;

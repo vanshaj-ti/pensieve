@@ -3,6 +3,7 @@ import { TopInsight } from './topInsights.js';
 import { RecurrenceChain } from './recurrenceChains.js';
 import { ProjectRollup } from './crossProjectRollup.js';
 import { EffortBreakdown } from './effortBreakdown.js';
+import { EngagementBreakdown } from './engagement.js';
 
 export interface AnalyticsSnapshot {
   categoryTrend: CategoryTrendPoint[];
@@ -10,6 +11,7 @@ export interface AnalyticsSnapshot {
   recurrenceChains: RecurrenceChain[];
   crossProjectRollup: ProjectRollup[];
   effortBreakdown: EffortBreakdown;
+  engagementBreakdown: EngagementBreakdown;
 }
 
 export * from './shared.js';
@@ -23,3 +25,4 @@ export * from './labels.js';
 export * from './effortByCategory.js';
 export * from './derivedInsights.js';
 export * from './search.js';
+export * from './engagement.js';
