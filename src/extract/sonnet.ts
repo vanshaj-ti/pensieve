@@ -29,11 +29,15 @@ export function getRecentInsights(db: Database.Database, days = 7): Insight[] {
   });
 }
 
-const SONNET_SYSTEM_PROMPT = `You are a verification and scoring system for development-session work items.
+function getSonnetSystemPrompt(recentHistoryDays: number): string {
+  return `You are a verification and scoring system for development-session work items.
 
 You receive:
 1. Candidate work items extracted from today's sessions (indexed with episodeId, category, text, evidenceRef, evidenceSnippet)
-2. Recent history of previously stored work items (from the last 5-7 days)
+2. Recent history of previously stored work items (from the last ${recentHistoryDays} days)`;
+}
+
+const SONNET_SYSTEM_PROMPT_TAIL = `
 
 Note: exact-duplicate collapsing and cross-day recurrence linking already
 happen downstream via embedding similarity — you do not need to solve those
@@ -106,6 +110,7 @@ export async function verifyAndScore(
   candidatesWithSource: CandidateWithSource[],
   recentHistory: Insight[],
   client: Anthropic,
+  recentHistoryDays?: number,
 ): Promise<Insight[]> {
   try {
     const candidatesList = candidatesWithSource
@@ -152,12 +157,12 @@ Process these candidates: reject hallucinations, merge near-duplicates, score si
       system: [
         {
           type: 'text',
-          text: SONNET_SYSTEM_PROMPT,
+          text: getSonnetSystemPrompt(recentHistoryDays ?? 7) + SONNET_SYSTEM_PROMPT_TAIL,
           cache_control: { type: 'ephemeral' },
         },
         {
           type: 'text',
-          text: `Recent history (last 5-7 days):\n${historyList}`,
+          text: `Recent history (last ${recentHistoryDays ?? 7} days):\n${historyList}`,
           cache_control: { type: 'ephemeral' },
         },
       ],

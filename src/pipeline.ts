@@ -124,7 +124,7 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
 
           // Extract all episodes in this date batch together (only if not dry-run)
           if (!options.dryRun) {
-            const allInsights = await runExtraction(persistedEpisodes, db, client);
+            const allInsights = await runExtraction(persistedEpisodes, db, client, config);
 
             // Apply embedding-based recurrence detection
             const insightsWithEmbeddings = await applyEmbeddingRecurrence(allInsights, db, config);
