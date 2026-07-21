@@ -10,10 +10,12 @@ import {
   getRecurrenceChains,
   getCrossProjectRollup,
   getEffortBreakdown,
+  getEngagementBreakdown,
   type TopInsight,
   type RecurrenceChain,
   type ProjectRollup,
   type EffortBreakdown,
+  type EngagementBreakdown,
 } from './analytics/index.js';
 import { synthesizeBriefNarrative } from './synthesis.js';
 
@@ -60,6 +62,7 @@ export function renderBriefMarkdown(
   crossProjectRollup: ProjectRollup[] = [],
   effortBreakdown?: EffortBreakdown,
   narrative?: string | null,
+  engagementBreakdown?: EngagementBreakdown,
 ): string {
   const lines: string[] = [`# Pensieve Brief — ${date}\n`];
 
@@ -74,6 +77,34 @@ export function renderBriefMarkdown(
     lines.push(
       `${pct(effortBreakdown.judgmentRatio)} judgment, ${pct(effortBreakdown.toilRatio)} toil, ${pct(effortBreakdown.overheadRatio)} overhead (${effortBreakdown.total} insights today)`,
     );
+    lines.push('');
+  }
+
+  if (engagementBreakdown && engagementBreakdown.total > 0) {
+    lines.push(`## Engagement Pattern\n`);
+    const eb = engagementBreakdown;
+    if (eb.engagementRatio === null) {
+      lines.push(
+        `No unprompted babysitting detected today (${eb.deliberative} deliberative, ${eb.corrective} corrective, ${eb.directiveNecessary} necessary directive turns).`,
+      );
+    } else {
+      lines.push(
+        `${eb.engagementRatio.toFixed(1)}x good-engagement-to-babysitting ratio — ${eb.deliberative} deliberative + ${eb.corrective} corrective turns vs. ${eb.directiveUnnecessary} unnecessary directive (babysitting) turns` +
+          (eb.directiveNecessary > 0
+            ? ` (${eb.directiveNecessary} more directive turns were necessary gates, not counted as babysitting)`
+            : ''),
+      );
+      if (eb.longestDirectiveBurst > 1) {
+        lines.push(`Longest babysitting streak: ${eb.longestDirectiveBurst} turns in a row.`);
+      }
+      if (eb.flaggedDirectives.length > 0) {
+        lines.push('');
+        lines.push('Recent babysitting turns flagged:');
+        for (const flagged of eb.flaggedDirectives) {
+          lines.push(`- (line ${flagged.humanLineNumber}) ${flagged.reason}`);
+        }
+      }
+    }
     lines.push('');
   }
 
@@ -235,6 +266,7 @@ export async function writeBrief(
   const recurrenceChains = getRecurrenceChains(db, 30);
   const crossProjectRollup = getCrossProjectRollup(db, { date });
   const effortBreakdown = getEffortBreakdown(db, { date });
+  const engagementBreakdown = getEngagementBreakdown(db, { date });
 
   // Narrative synthesis is additive polish — never let a failure here block
   // brief generation. `client: null` opts out explicitly (used by tests);
@@ -256,6 +288,7 @@ export async function writeBrief(
     crossProjectRollup,
     effortBreakdown,
     narrative,
+    engagementBreakdown,
   );
 
   // Create directory and write file

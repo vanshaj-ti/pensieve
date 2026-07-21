@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { CandidateSchema, type Candidate } from '../types.js';
 import type { EpisodeDraft } from '../chunk/episodes.js';
 import type { ParsedLine } from '../ingest/parser.js';
+import { renderMessageContent } from '../ingest/content.js';
 
 export class HaikuExtractionError extends Error {
   constructor(
@@ -52,65 +53,11 @@ interface RenderedLine {
 }
 
 function renderLines(lines: ParsedLine[]): RenderedLine[] {
-  return lines.map((line) => {
-    let content = '';
-    const rawObj = line.raw as Record<string, unknown> | null;
-
-    if (rawObj && 'message' in rawObj) {
-      const message = rawObj.message as Record<string, unknown> | null;
-      if (message && 'content' in message) {
-        if (typeof message.content === 'string') {
-          content = message.content;
-        } else if (Array.isArray(message.content)) {
-          const textParts: string[] = [];
-          for (const block of message.content) {
-            if (typeof block === 'object' && block !== null) {
-              if ('type' in block && block.type === 'text' && 'text' in block) {
-                textParts.push(String(block.text));
-              } else if (
-                'type' in block &&
-                block.type === 'tool_use' &&
-                'name' in block &&
-                'input' in block
-              ) {
-                textParts.push(`[tool_use: ${String(block.name)}] ${JSON.stringify(block.input)}`);
-              } else if ('type' in block && block.type === 'tool_result' && 'content' in block) {
-                const trContent = block.content;
-                let trText = '';
-                if (typeof trContent === 'string') {
-                  trText = trContent;
-                } else if (Array.isArray(trContent)) {
-                  const trParts: string[] = [];
-                  for (const item of trContent) {
-                    if (
-                      typeof item === 'object' &&
-                      item !== null &&
-                      'type' in item &&
-                      item.type === 'text' &&
-                      'text' in item
-                    ) {
-                      trParts.push(String(item.text));
-                    }
-                  }
-                  trText = trParts.join(' ');
-                }
-                if (trText) {
-                  textParts.push(`[tool_result] ${trText}`);
-                }
-              }
-            }
-          }
-          content = textParts.join('\n');
-        }
-      }
-    }
-
-    return {
-      lineNumber: line.lineNumber,
-      type: line.type,
-      content,
-    };
-  });
+  return lines.map((line) => ({
+    lineNumber: line.lineNumber,
+    type: line.type,
+    content: renderMessageContent(line.raw).content,
+  }));
 }
 
 /** Below this, an episode half is too small to usefully re-split further —

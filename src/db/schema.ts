@@ -58,6 +58,21 @@ export function initSchema(db: Database.Database): void {
       created_at TEXT NOT NULL
     );
 
+    -- One row per human turn, classified against the agent turn that
+    -- preceded it (see EngagementClassification in types.ts) — a separate
+    -- axis from insights.category (what the agent did), answering "was
+    -- this human turn babysitting or good engagement." Scoped to an
+    -- episode the same way insights are.
+    CREATE TABLE IF NOT EXISTS engagement_turns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      episode_id INTEGER NOT NULL REFERENCES episodes(id),
+      human_line_number INTEGER NOT NULL,
+      classification TEXT NOT NULL,
+      directive_necessary BOOLEAN,
+      reason TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS jobs (
       id TEXT PRIMARY KEY,
       kind TEXT NOT NULL,
