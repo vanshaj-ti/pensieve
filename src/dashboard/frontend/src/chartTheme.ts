@@ -1,4 +1,11 @@
 export const EFFORT_COLORS = { toil: '#e8785a', judgment: '#4bab8c', overhead: '#e0b03e' };
+export const ENGAGEMENT_COLORS = {
+  directiveNecessary: '#e0b03e',
+  directiveUnnecessary: '#e8785a',
+  deliberative: '#4bab8c',
+  corrective: '#6b9bd6',
+  acknowledgment: '#8a8a92',
+};
 export const CATEGORY_COLORS = ['#5b5bd6', '#4bab8c', '#e8785a', '#e0b03e', '#6b9bd6', '#c46bd6'];
 
 export function isDarkMode(): boolean {

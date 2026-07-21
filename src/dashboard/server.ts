@@ -12,21 +12,14 @@ import { listSessionFiles, readSessionMetadata } from '../ingest/scanner.js';
 import { runDailyAnalysis } from '../pipeline.js';
 import { deriveSessionInsights } from '../synthesis.js';
 import {
-  getCategoryTrend,
-  getTopInsights,
-  getTopInsightsCount,
-  getRecurrenceChains,
   getCrossProjectRollup,
-  getProjectEffortBreakdown,
-  getEffortBreakdown,
+  getEngagementBreakdown,
   getInsightDates,
-  getEffortBreakdownTrend,
   getLabels,
   getProjects,
   getSessions,
   getSessionRuns,
   updateLabelsForSession,
-  getEffortByCategory,
   getWorkItemsForRun,
   insertDerivedInsights,
   getDerivedInsights,
@@ -120,70 +113,6 @@ export function createDashboardServer(config: Config): Application {
     }
   });
 
-  app.get('/api/category-trend', (req: Request, res: Response) => {
-    try {
-      const days = parsePositiveInt(req.query.days as string, 30);
-      if (days === null) {
-        return res
-          .status(400)
-          .json({ error: 'Invalid days parameter: must be a positive integer' });
-      }
-      const trend = getCategoryTrend(db, days, parseFilter(req));
-      res.json(trend);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch category trend' });
-    }
-  });
-
-  app.get('/api/top-insights', (req: Request, res: Response) => {
-    try {
-      const range = parseDateRange(req);
-      if (!range) {
-        return res.status(400).json({
-          error: 'Invalid or missing date: provide date=YYYY-MM-DD or fromDate & toDate=YYYY-MM-DD',
-        });
-      }
-      const limit = parsePositiveInt(req.query.limit as string, 10);
-      if (limit === null) {
-        return res
-          .status(400)
-          .json({ error: 'Invalid limit parameter: must be a positive integer' });
-      }
-      const offsetRaw = req.query.offset as string | undefined;
-      let offset = 0;
-      if (offsetRaw !== undefined) {
-        if (!/^\d+$/.test(offsetRaw)) {
-          return res
-            .status(400)
-            .json({ error: 'Invalid offset parameter: must be a non-negative integer' });
-        }
-        offset = parseInt(offsetRaw, 10);
-      }
-      const filter = parseFilter(req);
-      const insights = getTopInsights(db, range, limit, filter, offset);
-      const total = getTopInsightsCount(db, range, filter);
-      const totalPages = Math.max(1, Math.ceil(total / limit));
-      res.json({ insights, total, totalPages, limit, offset });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch top insights' });
-    }
-  });
-
-  app.get('/api/recurrence-chains', (req: Request, res: Response) => {
-    try {
-      const days = parsePositiveInt(req.query.days as string, 30);
-      if (days === null) {
-        return res
-          .status(400)
-          .json({ error: 'Invalid days parameter: must be a positive integer' });
-      }
-      const chains = getRecurrenceChains(db, days, parseFilter(req));
-      res.json(chains);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch recurrence chains' });
-    }
-  });
-
   app.get('/api/cross-project', (req: Request, res: Response) => {
     try {
       const range = parseDateRange(req);
@@ -200,22 +129,7 @@ export function createDashboardServer(config: Config): Application {
     }
   });
 
-  app.get('/api/project-effort-breakdown', (req: Request, res: Response) => {
-    try {
-      const date = parseDate(req.query.date as string);
-      if (!date) {
-        return res
-          .status(400)
-          .json({ error: 'Invalid or missing date parameter: must be YYYY-MM-DD' });
-      }
-      const breakdown = getProjectEffortBreakdown(db, date, parseFilter(req));
-      res.json(breakdown);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch project effort breakdown' });
-    }
-  });
-
-  app.get('/api/effort-breakdown', (req: Request, res: Response) => {
+  app.get('/api/engagement-breakdown', (req: Request, res: Response) => {
     try {
       const range = parseDateRange(req);
       if (!range) {
@@ -224,41 +138,10 @@ export function createDashboardServer(config: Config): Application {
         });
       }
       const filter = parseFilter(req);
-      const breakdown = getEffortBreakdown(db, range, filter);
+      const breakdown = getEngagementBreakdown(db, range, filter);
       res.json(breakdown);
     } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch effort breakdown' });
-    }
-  });
-
-  app.get('/api/effort-breakdown-trend', (req: Request, res: Response) => {
-    try {
-      const days = parsePositiveInt(req.query.days as string, 30);
-      if (days === null) {
-        return res
-          .status(400)
-          .json({ error: 'Invalid days parameter: must be a positive integer' });
-      }
-      const trend = getEffortBreakdownTrend(db, days, parseFilter(req));
-      res.json(trend);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch effort breakdown trend' });
-    }
-  });
-
-  app.get('/api/effort-by-category', (req: Request, res: Response) => {
-    try {
-      const range = parseDateRange(req);
-      if (!range) {
-        return res.status(400).json({
-          error: 'Invalid or missing date: provide date=YYYY-MM-DD or fromDate & toDate=YYYY-MM-DD',
-        });
-      }
-      const filter = parseFilter(req);
-      const result = getEffortByCategory(db, range, filter);
-      res.json(result);
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to fetch effort by category' });
+      res.status(500).json({ error: 'Failed to fetch engagement breakdown' });
     }
   });
 
