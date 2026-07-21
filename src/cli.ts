@@ -7,6 +7,8 @@ import { runDailyAnalysis } from './pipeline.js';
 import { writeBrief } from './brief.js';
 import { localDateKey } from './chunk/episodes.js';
 import { startDashboardServer } from './dashboard/server.js';
+import { deriveSessionInsights } from './synthesis.js';
+import { getWorkItemsForRun, insertDerivedInsights } from './analytics/derivedInsights.js';
 
 const program = new Command();
 
@@ -117,6 +119,47 @@ program
   .option('--label <name>', 'Tag this run with a label (auto-generated if omitted)')
   .action(async (opts: AnalyzeCommandOptions) => {
     await runAnalyzeCommand(opts);
+  });
+
+export interface DeriveInsightsCommandOptions {
+  project: string;
+  session: string;
+  label: string;
+}
+
+export async function runDeriveInsightsCommand(opts: DeriveInsightsCommandOptions): Promise<void> {
+  const config = loadConfig();
+  const db = openDb(config.dbPath);
+  try {
+    const workItems = getWorkItemsForRun(db, opts.project, opts.session, opts.label);
+    const derived = await deriveSessionInsights({
+      projectDir: opts.project,
+      sessionId: opts.session,
+      label: opts.label,
+      workItems,
+    });
+    insertDerivedInsights(db, derived);
+    const plural = derived.length === 1 ? 'insight' : 'insights';
+    console.log(`Derived ${derived.length} ${plural} from ${workItems.length} work item(s)`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`Error: ${message}`);
+    process.exitCode = 1;
+  } finally {
+    db.close();
+  }
+}
+
+program
+  .command('derive-insights')
+  .description(
+    'Synthesize win/struggle/learning/risk insights from a run’s existing work items (the same second-order pass the dashboard triggers after analyze).',
+  )
+  .requiredOption('--project <projectDir>', 'Sanitized project dir name under ~/.claude/projects/')
+  .requiredOption('--session <sessionId>', 'Session id (filename minus .jsonl)')
+  .requiredOption('--label <name>', 'The analyze run’s label to derive insights for')
+  .action(async (opts: DeriveInsightsCommandOptions) => {
+    await runDeriveInsightsCommand(opts);
   });
 
 program

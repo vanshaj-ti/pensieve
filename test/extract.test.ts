@@ -280,7 +280,7 @@ describe('Extract: Haiku Pass', () => {
     });
   });
 
-  it('Case 5a: Schema violation in Haiku response throws error', async () => {
+  it('Case 5a: Schema violation in Haiku response skips bad candidate, returns rest', async () => {
     const episode: EpisodeDraft = {
       date: '2026-07-15',
       projectDir: '/test/project',
@@ -314,13 +314,27 @@ describe('Extract: Haiku Pass', () => {
                 text: 'Missing evidenceSnippet field',
                 evidenceRef: 'line:1',
               },
+              {
+                category: 'bug_fix',
+                text: 'Valid candidate in the same response',
+                evidenceRef: 'line:1',
+                evidenceSnippet: 'test',
+              },
             ],
           },
         },
       ],
     });
 
-    await expect(generateCandidates(episode, client)).rejects.toThrow(HaikuExtractionError);
+    const result = await generateCandidates(episode, client);
+    expect(result).toEqual([
+      {
+        category: 'bug_fix',
+        text: 'Valid candidate in the same response',
+        evidenceRef: 'line:1',
+        evidenceSnippet: 'test',
+      },
+    ]);
   });
 
   it('Case 5c: Non-array candidates field rejected', async () => {
@@ -358,6 +372,88 @@ describe('Extract: Haiku Pass', () => {
     });
 
     await expect(generateCandidates(episode, client)).rejects.toThrow(HaikuExtractionError);
+  });
+
+  it('Case 5e: max_tokens truncation bisects episode and retries both halves', async () => {
+    const lines = Array.from({ length: 30 }, (_, i) => ({
+      lineNumber: i + 1,
+      type: 'user' as const,
+      timestamp: '2026-07-15T10:00:00Z',
+      hasToolUse: false,
+      raw: {
+        type: 'user',
+        timestamp: '2026-07-15T10:00:00Z',
+        message: { content: `line ${i + 1}` },
+      },
+    }));
+    const episode: EpisodeDraft = {
+      date: '2026-07-15',
+      projectDir: '/test/project',
+      sessionId: 'session-1',
+      startLine: 1,
+      endLine: 30,
+      lines,
+    };
+
+    // First call (the full 30-line episode): truncated mid-array, no
+    // `candidates` field at all — the real failure mode observed in
+    // production (stop_reason "max_tokens").
+    mockCreate.mockResolvedValueOnce({
+      stop_reason: 'max_tokens',
+      content: [{ type: 'tool_use', name: 'emit_candidates', input: {} }],
+    });
+    // Retry of the first half (lines 1-15).
+    mockCreate.mockResolvedValueOnce({
+      stop_reason: 'end_turn',
+      content: [
+        {
+          type: 'tool_use',
+          name: 'emit_candidates',
+          input: {
+            candidates: [
+              {
+                category: 'bug_fix',
+                text: 'first half',
+                evidenceRef: 'line:1',
+                evidenceSnippet: 'x',
+              },
+            ],
+          },
+        },
+      ],
+    });
+    // Retry of the second half (lines 16-30).
+    mockCreate.mockResolvedValueOnce({
+      stop_reason: 'end_turn',
+      content: [
+        {
+          type: 'tool_use',
+          name: 'emit_candidates',
+          input: {
+            candidates: [
+              {
+                category: 'exploration',
+                text: 'second half',
+                evidenceRef: 'line:16',
+                evidenceSnippet: 'y',
+              },
+            ],
+          },
+        },
+      ],
+    });
+
+    const result = await generateCandidates(episode, client);
+    expect(mockCreate).toHaveBeenCalledTimes(3);
+    expect(result).toEqual([
+      { category: 'bug_fix', text: 'first half', evidenceRef: 'line:1', evidenceSnippet: 'x' },
+      {
+        category: 'exploration',
+        text: 'second half',
+        evidenceRef: 'line:16',
+        evidenceSnippet: 'y',
+      },
+    ]);
   });
 });
 

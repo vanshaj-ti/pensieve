@@ -113,14 +113,37 @@ function renderLines(lines: ParsedLine[]): RenderedLine[] {
   });
 }
 
+/** Below this, an episode half is too small to usefully re-split further —
+ * stop bisecting and let the error surface (matches the pre-existing
+ * skip-episode behavior for a genuinely irreducible failure). */
+const MIN_SPLIT_LINES = 20;
+
 export async function generateCandidates(
   episode: EpisodeDraft,
   client: Anthropic,
 ): Promise<Candidate[]> {
   try {
-    const renderedLines = renderLines(episode.lines);
+    return await generateCandidatesForLines(episode, episode.lines, client);
+  } catch (error) {
+    console.error(
+      `Haiku extraction error for episode ${episode.sessionId}:${episode.startLine}-${episode.endLine}:`,
+      error,
+    );
+    throw new HaikuExtractionError(episode, error);
+  }
+}
 
-    const userMessage = `Episode from ${episode.date} (${episode.projectDir}/${episode.sessionId})\nLines ${episode.startLine}-${episode.endLine}:\n\n${renderedLines.map((line) => `[Line ${line.lineNumber}] (${line.type}): ${line.content}`).join('\n')}`;
+async function generateCandidatesForLines(
+  episode: EpisodeDraft,
+  lines: ParsedLine[],
+  client: Anthropic,
+): Promise<Candidate[]> {
+  try {
+    const renderedLines = renderLines(lines);
+    const startLine = lines[0]?.lineNumber ?? episode.startLine;
+    const endLine = lines[lines.length - 1]?.lineNumber ?? episode.endLine;
+
+    const userMessage = `Episode from ${episode.date} (${episode.projectDir}/${episode.sessionId})\nLines ${startLine}-${endLine}:\n\n${renderedLines.map((line) => `[Line ${line.lineNumber}] (${line.type}): ${line.content}`).join('\n')}`;
 
     // NOTE: calling client.beta.promptCaching.messages.create directly (not via
     // a detached function reference) is required — the SDK's Messages class
@@ -206,6 +229,21 @@ export async function generateCandidates(
       toolUse.input === null ||
       !('candidates' in toolUse.input)
     ) {
+      // A large episode's rendered transcript can produce more candidates
+      // than fit in max_tokens=8192, truncating the tool_use JSON mid-array
+      // (observed: 253,935-token episode, stop_reason "max_tokens") — this
+      // used to throw straight to HaikuExtractionError and silently drop the
+      // ENTIRE episode's insights. Bisect the episode's lines and retry each
+      // half instead: smaller inputs produce proportionally smaller (and
+      // still complete) candidate arrays.
+      if ((response as any).stop_reason === 'max_tokens' && lines.length > MIN_SPLIT_LINES) {
+        const mid = Math.floor(lines.length / 2);
+        const [first, second] = await Promise.all([
+          generateCandidatesForLines(episode, lines.slice(0, mid), client),
+          generateCandidatesForLines(episode, lines.slice(mid), client),
+        ]);
+        return [...first, ...second];
+      }
       throw new Error(
         `Tool input missing candidates field (stop_reason: ${(response as any).stop_reason}) — ` +
           'likely truncated by max_tokens if stop_reason is "max_tokens"',
@@ -217,10 +255,24 @@ export async function generateCandidates(
       throw new Error(`Tool input candidates must be an array, got ${typeof candidates}`);
     }
 
-    return candidates.map((item: unknown) => {
-      const parsed = CandidateSchema.parse(item);
-      return parsed;
-    });
+    // safeParse per item, not .map(CandidateSchema.parse) — a single bad
+    // item (e.g. Haiku emitting a category value outside the enum) used to
+    // throw on the whole array via .parse(), discarding every OTHER valid
+    // candidate in the same response and dropping the entire episode. Skip
+    // just the offending item instead.
+    const parsedCandidates: Candidate[] = [];
+    for (const item of candidates) {
+      const result = CandidateSchema.safeParse(item);
+      if (result.success) {
+        parsedCandidates.push(result.data);
+      } else {
+        console.error(
+          `Skipping malformed candidate for episode ${episode.sessionId}:${episode.startLine}-${episode.endLine}:`,
+          result.error.message,
+        );
+      }
+    }
+    return parsedCandidates;
   } catch (error) {
     console.error(
       `Haiku extraction error for episode ${episode.sessionId}:${episode.startLine}-${episode.endLine}:`,
