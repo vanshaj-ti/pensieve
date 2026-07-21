@@ -3,6 +3,7 @@ import type { ParsedLine } from '../src/ingest/parser.js';
 import type { Config } from '../src/config.js';
 import { bucketByDay, splitEpisodes, MAX_EPISODE_TOKENS } from '../src/chunk/episodes.js';
 import { chunkSession } from '../src/chunk/index.js';
+import { detectCompactionBoundaries } from '../src/chunk/compaction.js';
 
 function createLine(
   lineNumber: number,
@@ -255,6 +256,111 @@ describe('splitEpisodes', () => {
   });
 });
 
+describe('detectCompactionBoundaries', () => {
+  it('returns empty set when no line has isCompactSummary', () => {
+    const lines = [
+      createLine(1, 'user', '2026-07-15T10:00:00Z'),
+      createLine(2, 'assistant', '2026-07-15T10:01:00Z'),
+      createLine(3, 'user', '2026-07-15T10:02:00Z'),
+    ];
+
+    const boundaries = detectCompactionBoundaries(lines);
+    expect(boundaries).toEqual(new Set());
+  });
+
+  it('marks the previous line number when a line has isCompactSummary=true', () => {
+    const lines = [
+      createLine(1, 'user', '2026-07-15T10:00:00Z'),
+      createLine(2, 'assistant', '2026-07-15T10:01:00Z'),
+      {
+        lineNumber: 3,
+        type: 'user' as const,
+        timestamp: '2026-07-15T10:02:00Z',
+        hasToolUse: false,
+        raw: {
+          type: 'user',
+          isCompactSummary: true,
+          message: { role: 'user', content: 'This session is being continued...' },
+        },
+      },
+      createLine(4, 'user', '2026-07-15T10:03:00Z'),
+    ];
+
+    const boundaries = detectCompactionBoundaries(lines);
+    expect(boundaries).toEqual(new Set([2]));
+  });
+
+  it('does not add boundary when compact-summary line is the first parsed line', () => {
+    const lines = [
+      {
+        lineNumber: 1,
+        type: 'user' as const,
+        timestamp: '2026-07-15T10:00:00Z',
+        hasToolUse: false,
+        raw: {
+          type: 'user',
+          isCompactSummary: true,
+          message: { role: 'user', content: 'This session is being continued...' },
+        },
+      },
+      createLine(2, 'user', '2026-07-15T10:01:00Z'),
+    ];
+
+    const boundaries = detectCompactionBoundaries(lines);
+    expect(boundaries).toEqual(new Set());
+  });
+
+  it('handles multiple compaction events in one session', () => {
+    const lines = [
+      createLine(1, 'user', '2026-07-15T10:00:00Z'),
+      {
+        lineNumber: 2,
+        type: 'user' as const,
+        timestamp: '2026-07-15T10:01:00Z',
+        hasToolUse: false,
+        raw: { type: 'user', isCompactSummary: true, message: { role: 'user', content: '...' } },
+      },
+      createLine(3, 'user', '2026-07-15T10:02:00Z'),
+      {
+        lineNumber: 4,
+        type: 'user' as const,
+        timestamp: '2026-07-15T10:03:00Z',
+        hasToolUse: false,
+        raw: { type: 'user', isCompactSummary: true, message: { role: 'user', content: '...' } },
+      },
+      createLine(5, 'user', '2026-07-15T10:04:00Z'),
+    ];
+
+    const boundaries = detectCompactionBoundaries(lines);
+    expect(boundaries).toEqual(new Set([1, 3]));
+  });
+
+  it('ignores lines where isCompactSummary is absent, false, or non-boolean-truthy', () => {
+    const lines = [
+      createLine(1, 'user', '2026-07-15T10:00:00Z'),
+      {
+        lineNumber: 2,
+        type: 'user' as const,
+        timestamp: '2026-07-15T10:01:00Z',
+        hasToolUse: false,
+        raw: { type: 'user', isCompactSummary: false, content: '...' },
+      },
+      createLine(3, 'user', '2026-07-15T10:02:00Z'),
+      {
+        lineNumber: 4,
+        type: 'user' as const,
+        timestamp: '2026-07-15T10:03:00Z',
+        hasToolUse: false,
+        raw: { type: 'user', content: 'contains word compact' },
+      },
+      createLine(5, 'user', '2026-07-15T10:04:00Z'),
+    ];
+
+    const boundaries = detectCompactionBoundaries(lines);
+    expect(boundaries).toEqual(new Set());
+  });
+});
+
 describe('chunkSession', () => {
   it('integrates bucketByDay and splitEpisodes across multiple days', () => {
     const d1 = new Date(2026, 6, 15, 10, 0, 0); // Day 1
@@ -317,5 +423,87 @@ describe('chunkSession', () => {
 
     const result = chunkSession(scanResult, defaultConfig);
     expect(result).toEqual([]);
+  });
+
+  it('automatically detects compaction boundaries and splits episodes', () => {
+    const d1 = new Date(2026, 6, 15, 10, 0, 0);
+    const d2 = new Date(2026, 6, 15, 10, 1, 0); // only 1 min gap, no idle split
+    const d3 = new Date(2026, 6, 15, 10, 2, 0);
+    const d4 = new Date(2026, 6, 15, 10, 3, 0);
+
+    const lines: ParsedLine[] = [
+      createLine(1, 'user', d1.toISOString()),
+      createLine(2, 'assistant', d2.toISOString()),
+      {
+        lineNumber: 3,
+        type: 'user',
+        timestamp: d3.toISOString(),
+        hasToolUse: false,
+        raw: {
+          type: 'user',
+          isCompactSummary: true,
+          message: { role: 'user', content: 'This session is being continued...' },
+        },
+      },
+      createLine(4, 'user', d4.toISOString()),
+    ];
+
+    const scanResult = {
+      projectDir: '/test/project',
+      sessionId: 'session-123',
+      lines,
+    };
+
+    // Without detector, these 4 lines stay in one episode (no idle gap)
+    // With detector wired in, the compaction at line 3 splits after line 2
+    const result = chunkSession(scanResult, defaultConfig);
+    expect(result).toHaveLength(2);
+    expect(result[0].lines).toHaveLength(2);
+    expect(result[0].startLine).toBe(1);
+    expect(result[0].endLine).toBe(2);
+    expect(result[1].lines).toHaveLength(2);
+    expect(result[1].startLine).toBe(3);
+    expect(result[1].endLine).toBe(4);
+  });
+
+  it('prefers explicit compactionLineNumbers over detected boundaries', () => {
+    const d1 = new Date(2026, 6, 15, 10, 0, 0);
+    const d2 = new Date(2026, 6, 15, 10, 1, 0);
+    const d3 = new Date(2026, 6, 15, 10, 2, 0);
+    const d4 = new Date(2026, 6, 15, 10, 3, 0);
+
+    const lines: ParsedLine[] = [
+      createLine(1, 'user', d1.toISOString()),
+      createLine(2, 'assistant', d2.toISOString()),
+      {
+        lineNumber: 3,
+        type: 'user',
+        timestamp: d3.toISOString(),
+        hasToolUse: false,
+        raw: {
+          type: 'user',
+          isCompactSummary: true,
+          message: { role: 'user', content: 'This session is being continued...' },
+        },
+      },
+      createLine(4, 'user', d4.toISOString()),
+    ];
+
+    const scanResult = {
+      projectDir: '/test/project',
+      sessionId: 'session-123',
+      lines,
+    };
+
+    // Explicit override: force split at line 1 instead of detected line 2
+    const result = chunkSession(scanResult, defaultConfig, {
+      compactionLineNumbers: new Set([1]),
+    });
+
+    expect(result).toHaveLength(2);
+    expect(result[0].lines).toHaveLength(1);
+    expect(result[0].startLine).toBe(1);
+    expect(result[1].lines).toHaveLength(3);
+    expect(result[1].startLine).toBe(2);
   });
 });

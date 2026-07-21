@@ -102,11 +102,11 @@ const DERIVE_INSIGHTS_SYSTEM_PROMPT = `You derive higher-level insights from a s
 You receive every work item for one session (category, effortClass, significanceScore, text, and a numeric id).
 
 Produce 0-N derived insights, each with exactly one insightType:
-- struggle: What is the person doing wrong, or where are they stuck? Look for recurring friction_audit/bug_fix/ai_correction_load items, especially clustered around the same root cause.
-- win: What is the person doing right? Look for architecture_decisions with sound reasoning, efficient judgment-heavy work, or low ai_correction_load relative to AI-assisted work.
-- learning: What did the person learn? Look for exploration or architecture_decisions items that produced a real conclusion or changed understanding.
-- idea: What's worth exploring? Pull forward the most valuable high_potential_seeds item(s) — combine related seeds into one derived insight if they point at the same underlying opportunity. This is not just copying a seed verbatim; add the "why this matters now" framing if the work items support it.
-- risk: What unaddressed problem is building up? Look for a toil pattern that recurred without the root cause being fixed, or a friction/bug cluster that keeps costing time without resolution.
+- struggle: What is the person doing wrong, or where are they stuck? Look for recurring friction_audit/bug_fix/ai_correction_load items, especially clustered around the same root cause. E.g. three friction_audit items about a flaky test mock, plus a bug_fix that patches around it without touching the mock → derived struggle insight: "Repeated flaky-mock workarounds instead of fixing the mock itself."
+- win: What is the person doing right? Look for architecture_decisions with sound reasoning, efficient judgment-heavy work, or low ai_correction_load relative to AI-assisted work. E.g. an architecture_decisions item choosing SQLite over a queue with a clear tradeoff rationale, paired with low ai_correction_load during its implementation → derived win insight: "Clean, low-correction implementation of the SQLite decision."
+- learning: What did the person learn? Look for exploration or architecture_decisions items that produced a real conclusion or changed understanding. E.g. an exploration item that starts unsure how promptCaching interacts with tool_choice, ending in a concrete "cache_control must be on the system block, not per-message" conclusion → derived learning insight.
+- idea: What's worth exploring? Pull forward the most valuable high_potential_seeds item(s) — combine related seeds into one derived insight if they point at the same underlying opportunity. This is not just copying a seed verbatim; add the "why this matters now" framing if the work items support it. E.g. two high_potential_seeds items both gesturing at "add embeddings-based recurrence" → derived idea insight combining them with "why now" framing (recurrence detection is currently manual and already flagged twice today).
+- risk: What unaddressed problem is building up? Look for a toil pattern that recurred without the root cause being fixed, or a friction/bug cluster that keeps costing time without resolution. E.g. a mechanical_labor item redoing the same manual db migration step 3 times this session with no fix to the migration script → derived risk insight: "Manual migration re-run recurring without root-cause fix."
 
 Rules:
 - Do not invent a derived insight if the work items don't support it — it is correct and expected to return fewer than 5, or even zero, if the session's work items are too sparse or too routine (e.g. almost entirely mechanical_labor with no clusters or notable items).
@@ -225,8 +225,9 @@ Derive 0-N insights from these work items now.`;
       return [];
     }
 
+    const validWorkItemIds = new Set(input.workItems.map((item) => item.id));
     const createdAt = new Date().toISOString();
-    return rawInsights.map((item: unknown) => {
+    const parsed = rawInsights.map((item: unknown) => {
       const itemObj = item as Record<string, unknown>;
       const derived: DerivedInsight = {
         projectDir: input.projectDir,
@@ -239,6 +240,14 @@ Derive 0-N insights from these work items now.`;
       };
       return DerivedInsightSchema.parse(derived);
     });
+
+    // Drop (not strip) insights citing a hallucinated evidence id — an
+    // unverifiable-evidence insight is exactly what this function's
+    // "return [] on any failure, never surface something untrustworthy"
+    // philosophy says to discard rather than patch and show anyway.
+    return parsed.filter((insight) =>
+      insight.evidenceInsightIds.every((id) => validWorkItemIds.has(id)),
+    );
   } catch (err) {
     console.error(
       'Derive insights: API call failed:',
