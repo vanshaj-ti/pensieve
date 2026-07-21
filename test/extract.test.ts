@@ -16,6 +16,26 @@ import { verifyAndScore, type CandidateWithSource } from '../src/extract/sonnet.
 import { runExtraction, type PersistedEpisode } from '../src/extract/index.js';
 import { CandidateSchema, InsightSchema } from '../src/types.js';
 import type { EpisodeDraft } from '../src/chunk/episodes.js';
+import type { Config } from '../src/config.js';
+
+function makeTestConfig(overrides: Partial<Config> = {}): Config {
+  return {
+    idleGapMinutes: 25,
+    dbPath: ':memory:',
+    briefsDir: '/tmp',
+    embeddingsBaseUrl: null,
+    embeddingsApiKey: null,
+    embeddingsModel: 'text-embedding-3-small',
+    embeddingsAuthHeader: 'Authorization',
+    embeddingsAuthScheme: 'Bearer',
+    embeddingsExtraHeaders: {},
+    embeddingsPath: '/v1/embeddings',
+    recurrenceSimilarityThreshold: 0.9,
+    dedupeSimilarityThreshold: 0.95,
+    recentHistoryDays: 7,
+    ...overrides,
+  };
+}
 
 describe('Extract: Haiku Pass', () => {
   let client: Anthropic;
@@ -701,7 +721,7 @@ describe('Extract: Orchestration', () => {
         ],
       });
 
-    const result = await runExtraction(episodes, db, client);
+    const result = await runExtraction(episodes, db, client, makeTestConfig());
 
     expect(result).toHaveLength(1);
     expect(result[0]).toMatchObject({
@@ -777,7 +797,7 @@ describe('Extract: Orchestration', () => {
       ],
     });
 
-    const result = await runExtraction(episodes, db, client);
+    const result = await runExtraction(episodes, db, client, makeTestConfig());
 
     expect(result).toHaveLength(1);
     expect(mockCreate).toHaveBeenCalledTimes(2);
@@ -832,7 +852,7 @@ describe('Extract: Orchestration', () => {
       };
     });
 
-    await runExtraction(episodes, db, client);
+    await runExtraction(episodes, db, client, makeTestConfig());
 
     expect(haikuCallCount).toBe(episodeCount);
     expect(maxInFlight).toBeGreaterThan(1); // genuinely concurrent, not sequential
@@ -874,7 +894,7 @@ describe('Extract: Orchestration', () => {
       ],
     });
 
-    const result = await runExtraction(episodes, db, client);
+    const result = await runExtraction(episodes, db, client, makeTestConfig());
 
     expect(result).toHaveLength(0);
     expect(mockCreate).toHaveBeenCalledOnce();
@@ -963,7 +983,7 @@ describe('Extract: Orchestration', () => {
       };
     });
 
-    const result = await runExtraction(episodes, db, client);
+    const result = await runExtraction(episodes, db, client, makeTestConfig());
 
     expect(sonnetCallCount).toBe(3); // ceil(90 / 40) = 3 batches
     expect(sonnetBatchSizes).toEqual([40, 40, 10]);
@@ -1050,7 +1070,7 @@ describe('Extract: Orchestration', () => {
       };
     });
 
-    const result = await runExtraction(episodes, db, client);
+    const result = await runExtraction(episodes, db, client, makeTestConfig());
 
     expect(sonnetCallCount).toBe(3); // All three batches were attempted
     expect(result).toHaveLength(2); // Only insights from batches 2 and 3, batch 1 failed and contributed []
