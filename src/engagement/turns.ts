@@ -42,6 +42,27 @@ function isSystemInjectedTurn(text: string): boolean {
   return SYSTEM_INJECTED_RE.test(text);
 }
 
+/** Claude Code's own JSONL marks harness-injected content (stop-hook
+ * feedback, <system-reminder>/<local-command-caveat> blocks, slash-command
+ * re-invocations) with `isMeta: true` on the raw line object itself — a
+ * structural signal, more reliable than text pattern matching. Found via
+ * this feature's own brief output still showing a stop-hook-feedback turn
+ * ("Stop hook feedback:\nAgent hook condition was not met...") as a
+ * flagged babysitting turn after the SYSTEM_INJECTED_RE fix: that content
+ * doesn't start with any of the string markers SYSTEM_INJECTED_RE checks,
+ * but IS isMeta-flagged. Confirmed NOT redundant with SYSTEM_INJECTED_RE —
+ * <task-notification> content is NOT isMeta-flagged at all (a different
+ * injection mechanism), so both checks are needed, neither subsumes the
+ * other. */
+function isMetaLine(raw: unknown): boolean {
+  return (
+    typeof raw === 'object' &&
+    raw !== null &&
+    'isMeta' in raw &&
+    (raw as { isMeta: unknown }).isMeta === true
+  );
+}
+
 /**
  * Groups a flat, still-interleaved `ParsedLine[]` (as stored on
  * `EpisodeDraft.lines`) into turn pairs: each real human turn paired with
@@ -77,12 +98,12 @@ export function deriveTurnPairs(lines: ParsedLine[]): TurnPair[] {
     }
 
     // line.type === 'user'
-    if (!rendered.hasText || isSystemInjectedTurn(rendered.content)) {
+    if (!rendered.hasText || isSystemInjectedTurn(rendered.content) || isMetaLine(line.raw)) {
       // Pure tool_result echo, or a harness-injected system notification
       // (<task-notification>, <system-reminder>, background-task
-      // completion notices) — neither is the human typing anything, both
-      // belong to the agent's own turn context, not something to pair
-      // against as a human contribution.
+      // completion notices, stop-hook feedback) — neither is the human
+      // typing anything, both belong to the agent's own turn context, not
+      // something to pair against as a human contribution.
       if (clusterStartLine === null) {
         clusterStartLine = line.lineNumber;
       }
