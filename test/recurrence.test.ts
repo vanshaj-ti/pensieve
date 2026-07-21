@@ -65,21 +65,18 @@ describe('cosineSimilarity', () => {
 
 describe('embedAll concurrency', () => {
   it('respects EMBEDDING_CONCURRENCY max concurrent calls', async () => {
-    const insights = [
-      makeInsight({ text: 'insight 1' }),
-      makeInsight({ text: 'insight 2' }),
-      makeInsight({ text: 'insight 3' }),
-      makeInsight({ text: 'insight 4' }),
-      makeInsight({ text: 'insight 5' }),
-    ];
+    // Create 12 insights to exceed EMBEDDING_CONCURRENCY (5) and prove concurrency limit enforced
+    const insights = Array.from({ length: 12 }, (_, i) =>
+      makeInsight({ text: `insight ${i + 1}` }),
+    );
 
     let maxConcurrent = 0;
     let currentConcurrent = 0;
     const fetchMock = vi.fn(async () => {
       currentConcurrent++;
       maxConcurrent = Math.max(maxConcurrent, currentConcurrent);
-      // Simulate variable latency to prove no ordering dependency
-      await new Promise((r) => setTimeout(r, Math.random() * 10));
+      // Add delay to force actual overlapping calls and prove concurrency matters
+      await new Promise((r) => setTimeout(r, 20));
       currentConcurrent--;
       return {
         ok: true,
@@ -110,15 +107,15 @@ describe('embedAll concurrency', () => {
     const result = await embedAll(insights, config);
 
     // Results should be in input order regardless of which call resolved first
-    expect(result).toHaveLength(5);
-    for (let i = 0; i < 5; i++) {
+    expect(result).toHaveLength(12);
+    for (let i = 0; i < 12; i++) {
       expect(result[i].insight.text).toBe(`insight ${i + 1}`);
     }
 
-    // Max concurrent should be at most 5 (EMBEDDING_CONCURRENCY)
-    expect(maxConcurrent).toBeLessThanOrEqual(5);
-    // Confirm calls happened (not proving exact limit but confirms concurrency happened)
-    expect(fetchMock).toHaveBeenCalled();
+    // Max concurrent must be exactly 5 (EMBEDDING_CONCURRENCY), not 1 and not unbounded
+    expect(maxConcurrent).toBe(5);
+    // 12 requests with concurrency 5 = 3 batches
+    expect(fetchMock).toHaveBeenCalledTimes(12);
   });
 });
 

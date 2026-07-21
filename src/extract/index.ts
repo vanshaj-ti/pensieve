@@ -132,7 +132,7 @@ export async function runExtraction(
 
   const batchResults = await mapWithConcurrency(batches, SONNET_CONCURRENCY, async (batch) => {
     try {
-      return await verifyAndScore(batch, recentHistory, client);
+      return await verifyAndScore(batch, recentHistory, client, config.recentHistoryDays);
     } catch (error) {
       if (error instanceof SonnetVerificationError) {
         console.error(

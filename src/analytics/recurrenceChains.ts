@@ -22,7 +22,7 @@ type InsightRow = {
   date: string;
 };
 
-function resolveInsight(
+export function resolveInsight(
   db: Database.Database,
   insightMap: Map<number, InsightRow>,
   id: number,
