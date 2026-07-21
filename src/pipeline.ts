@@ -122,8 +122,6 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
             id: index,
           }));
 
-          let insightCount = 0;
-
           // Extract all episodes in this date batch together (only if not dry-run)
           if (!options.dryRun) {
             const allInsights = await runExtraction(persistedEpisodes, db, client);
@@ -205,7 +203,6 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
             })();
 
             result.insightsPersisted += dayInserts;
-            insightCount = dayInserts;
 
             // Advance cursor past this date's max line
             const dateMaxLine = Math.max(...dayDrafts.map((d) => d.endLine));

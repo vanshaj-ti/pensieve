@@ -328,6 +328,56 @@ describe('pipeline', () => {
     expect(episodeCount.count).toBe(0);
   });
 
+  it('full success: cursor advances to maxLineNumber', async () => {
+    const now = new Date().toISOString();
+    const scanResult: ScanResult = {
+      projectDir: '/tmp/test-project',
+      sessionId: 'session-1',
+      filePath: '/tmp/test-project/session-1.jsonl',
+      lines: [
+        {
+          lineNumber: 1,
+          timestamp: now,
+          kind: 'tool' as const,
+          toolName: 'test',
+          text: 'test line',
+        },
+      ],
+      maxLineNumber: 100,
+    };
+
+    const insights: Insight[] = [
+      {
+        episodeId: 0,
+        category: 'architecture_decisions',
+        text: 'Test insight',
+        evidenceRef: 'line 50',
+        significanceScore: 0.8,
+        verifiedByGit: null,
+        recurrenceOf: null,
+        createdAt: now,
+      },
+    ];
+
+    const { scanNewLines } = await import('../src/ingest/index.js');
+    const { runExtraction } = await import('../src/extract/index.js');
+
+    vi.mocked(scanNewLines).mockResolvedValueOnce([scanResult]);
+    vi.mocked(runExtraction).mockResolvedValueOnce(insights);
+
+    const result = await runDailyAnalysis({
+      db,
+      force: false,
+    });
+
+    expect(result.sessionsProcessed).toBe(1);
+    expect(result.sessionsFailed).toBe(0);
+
+    // After full success, cursor should advance to maxLineNumber, not just episode endLine
+    const cursor = getCursor(db, '/tmp/test-project', 'session-1');
+    expect(cursor).toBe(100);
+  });
+
   it('embeddings disabled: no rows inserted into insight_embeddings', async () => {
     const now = new Date().toISOString();
     const scanResult: ScanResult = {
