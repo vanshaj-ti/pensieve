@@ -244,4 +244,42 @@ describe('deriveSessionInsights', () => {
 
     expect(result).toEqual([]);
   });
+
+  it('drops a derived insight whose evidenceInsightIds cites an id not present in workItems', async () => {
+    const client = makeClient(async () => ({
+      content: [
+        {
+          type: 'tool_use',
+          name: 'emit_derived_insights',
+          input: {
+            insights: [
+              {
+                insightType: 'struggle',
+                text: 'Grounded insight',
+                evidenceInsightIds: [1],
+              },
+              {
+                insightType: 'risk',
+                text: 'Hallucinated insight',
+                evidenceInsightIds: [999],
+              },
+            ],
+          },
+        },
+      ],
+    }));
+
+    const result = await deriveSessionInsights(
+      {
+        projectDir: '/proj',
+        sessionId: 'sess',
+        label: 'run-a',
+        workItems: [makeInsight({ id: 1 })],
+      },
+      client,
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0].text).toBe('Grounded insight');
+  });
 });

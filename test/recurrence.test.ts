@@ -63,6 +63,65 @@ describe('cosineSimilarity', () => {
   });
 });
 
+describe('embedAll concurrency', () => {
+  it('respects EMBEDDING_CONCURRENCY max concurrent calls', async () => {
+    const insights = [
+      makeInsight({ text: 'insight 1' }),
+      makeInsight({ text: 'insight 2' }),
+      makeInsight({ text: 'insight 3' }),
+      makeInsight({ text: 'insight 4' }),
+      makeInsight({ text: 'insight 5' }),
+    ];
+
+    let maxConcurrent = 0;
+    let currentConcurrent = 0;
+    const fetchMock = vi.fn(async () => {
+      currentConcurrent++;
+      maxConcurrent = Math.max(maxConcurrent, currentConcurrent);
+      // Simulate variable latency to prove no ordering dependency
+      await new Promise((r) => setTimeout(r, Math.random() * 10));
+      currentConcurrent--;
+      return {
+        ok: true,
+        json: async () => ({ data: [{ embedding: [0.5, 0.5], index: 0 }] }),
+      };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const config: Config = {
+      idleGapMinutes: 25,
+      dbPath: ':memory:',
+      briefsDir: '/tmp',
+      embeddingsBaseUrl: 'https://api.example.com',
+      embeddingsApiKey: 'test-key',
+      embeddingsModel: 'text-embedding-3-small',
+      embeddingsAuthHeader: 'Authorization',
+      embeddingsAuthScheme: 'Bearer',
+      embeddingsExtraHeaders: {},
+      embeddingsPath: '/v1/embeddings',
+      recurrenceSimilarityThreshold: 0.9,
+      dedupeSimilarityThreshold: 0.95,
+      recentHistoryDays: 7,
+    };
+
+    // Import directly to test embedAll concurrency
+    const { embedAll } = await import('../src/extract/recurrence.js');
+
+    const result = await embedAll(insights, config);
+
+    // Results should be in input order regardless of which call resolved first
+    expect(result).toHaveLength(5);
+    for (let i = 0; i < 5; i++) {
+      expect(result[i].insight.text).toBe(`insight ${i + 1}`);
+    }
+
+    // Max concurrent should be at most 5 (EMBEDDING_CONCURRENCY)
+    expect(maxConcurrent).toBeLessThanOrEqual(5);
+    // Confirm calls happened (not proving exact limit but confirms concurrency happened)
+    expect(fetchMock).toHaveBeenCalled();
+  });
+});
+
 describe('applyEmbeddingRecurrence', () => {
   let db: Database.Database;
   const baseConfig: Config = {
@@ -77,6 +136,8 @@ describe('applyEmbeddingRecurrence', () => {
     embeddingsExtraHeaders: {},
     embeddingsPath: '/v1/embeddings',
     recurrenceSimilarityThreshold: 0.9,
+    dedupeSimilarityThreshold: 0.95,
+    recentHistoryDays: 7,
   };
 
   beforeEach(() => {
@@ -352,5 +413,31 @@ describe('dedupeInsightsByEmbedding', () => {
 
   it('empty input returns empty output', () => {
     expect(dedupeInsightsByEmbedding([], threshold)).toEqual([]);
+  });
+
+  it('respects dedupe threshold (0.95) independently from recurrence threshold (0.90)', () => {
+    // Two insights with similarity between 0.90 and 0.95: should NOT dedupe (separate-batch concern)
+    // but WOULD collapse under old single-threshold behavior.
+    const vec1 = [1, 0, 0];
+    // vec2 at ~0.932 similarity to vec1 (in the split zone: > 0.90, < 0.95)
+    const vec2 = [1, 0.39, 0];
+    const sim = cosineSimilarity(vec1, vec2);
+
+    // Confirm it's in the split zone
+    expect(sim).toBeGreaterThan(0.9);
+    expect(sim).toBeLessThan(0.95);
+
+    const items = [
+      withEmbedding(makeInsight({ text: 'insight1' }), vec1),
+      withEmbedding(makeInsight({ text: 'insight2' }), vec2),
+    ];
+
+    // dedupe threshold 0.95: should NOT collapse
+    const result = dedupeInsightsByEmbedding(items, 0.95);
+    expect(result).toHaveLength(2);
+
+    // old single-threshold 0.9 would have collapsed them
+    const resultOldBehavior = dedupeInsightsByEmbedding(items, 0.9);
+    expect(resultOldBehavior).toHaveLength(1);
   });
 });

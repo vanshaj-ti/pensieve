@@ -8,6 +8,50 @@ export interface RecurrenceChain {
   span: { firstDate: string; lastDate: string };
 }
 
+type InsightRow = {
+  id: number;
+  episode_id: number;
+  category: string;
+  text: string;
+  evidence_ref: string;
+  significance_score: number;
+  effort_class: string;
+  verified_by_git: boolean | null;
+  recurrence_of: number | null;
+  created_at: string;
+  date: string;
+};
+
+function resolveInsight(
+  db: Database.Database,
+  insightMap: Map<number, InsightRow>,
+  id: number,
+): InsightRow | undefined {
+  let row = insightMap.get(id);
+  if (row) {
+    return row;
+  }
+
+  row = db
+    .prepare(
+      `
+    SELECT
+      i.id, i.episode_id, i.category, i.text, i.evidence_ref, i.significance_score,
+      i.effort_class, i.verified_by_git, i.recurrence_of, i.created_at, e.date
+    FROM insights i
+    JOIN episodes e ON i.episode_id = e.id
+    WHERE i.id = ?
+  `,
+    )
+    .get(id) as InsightRow | undefined;
+
+  if (row) {
+    insightMap.set(id, row);
+  }
+
+  return row;
+}
+
 export function getRecurrenceChains(
   db: Database.Database,
   days: number,
@@ -44,7 +88,7 @@ export function getRecurrenceChains(
   }>;
 
   // Build a map of all insights for chain following
-  const insightMap = new Map<number, (typeof insightsInWindow)[0]>();
+  const insightMap = new Map<number, InsightRow>();
   const recurrenceMap = new Map<number, number>();
 
   for (const insight of insightsInWindow) {
@@ -79,27 +123,12 @@ export function getRecurrenceChains(
       visitedInWalk.add(current);
 
       // Load insight if not in map
-      if (!insightMap.has(current)) {
-        const row = db
-          .prepare(
-            `
-          SELECT
-            i.id, i.episode_id, i.category, i.text, i.evidence_ref, i.significance_score,
-            i.effort_class, i.verified_by_git, i.recurrence_of, i.created_at, e.date
-          FROM insights i
-          JOIN episodes e ON i.episode_id = e.id
-          WHERE i.id = ?
-        `,
-          )
-          .get(current) as (typeof insightsInWindow)[0] | undefined;
-
-        if (!row) {
-          // Not found, treat current as root
-          rootId = current;
-          path.push(current);
-          break;
-        }
-        insightMap.set(current, row);
+      const row = resolveInsight(db, insightMap, current);
+      if (!row) {
+        // Not found, treat current as root
+        rootId = current;
+        path.push(current);
+        break;
       }
 
       const ins = insightMap.get(current)!;
@@ -145,23 +174,8 @@ export function getRecurrenceChains(
     // Map all chain IDs to Insights, loading any outside the window if needed
     const allChainInsights = chainIds
       .map((id) => {
-        let row = insightMap.get(id);
-        if (!row) {
-          // Load from DB if outside window
-          row = db
-            .prepare(
-              `
-            SELECT
-              i.id, i.episode_id, i.category, i.text, i.evidence_ref, i.significance_score,
-              i.effort_class, i.verified_by_git, i.recurrence_of, i.created_at, e.date
-            FROM insights i
-            JOIN episodes e ON i.episode_id = e.id
-            WHERE i.id = ?
-          `,
-            )
-            .get(id) as (typeof insightsInWindow)[0] | undefined;
-          if (!row) return null;
-        }
+        const row = resolveInsight(db, insightMap, id);
+        if (!row) return null;
         return InsightSchema.parse({
           id: row.id,
           episodeId: row.episode_id,

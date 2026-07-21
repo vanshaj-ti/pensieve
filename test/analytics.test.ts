@@ -568,6 +568,56 @@ describe('analytics', () => {
       expect(result[0]?.insights[1]?.text).toBe('Middle');
       expect(result[0]?.insights[2]?.text).toBe('Last');
     });
+
+    it('resolveInsight helper caches ancestors fetched from DB into insightMap', () => {
+      // Verify that the resolveInsight helper both fetches missing IDs from the DB
+      // and writes them back to the map. This is tested via a chain where the root
+      // is in the window but a middle ancestor is deliberately not prefetched.
+      db.prepare(
+        `
+        INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
+        VALUES ('2026-07-13', '/tmp/project', 'session-1', 1, 5),
+               ('2026-07-14', '/tmp/project', 'session-1', 6, 10),
+               ('2026-07-15', '/tmp/project', 'session-1', 11, 15)
+      `,
+      ).run();
+
+      db.prepare(
+        `
+        INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
+        VALUES (1, 'friction_audit', 'Root insight', 'ref', 0.8, NULL, NULL, '2026-07-13T10:00:00Z')
+      `,
+      ).run();
+
+      const rootId = db.prepare('SELECT last_insert_rowid() as id').get() as { id: number };
+
+      db.prepare(
+        `
+        INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
+        VALUES (2, 'friction_audit', 'Middle recurrence', 'ref', 0.7, NULL, ?, '2026-07-14T10:00:00Z')
+      `,
+      ).run(rootId.id);
+
+      const middleId = db.prepare('SELECT last_insert_rowid() as id').get() as { id: number };
+
+      db.prepare(
+        `
+        INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
+        VALUES (3, 'friction_audit', 'Latest recurrence', 'ref', 0.6, NULL, ?, '2026-07-15T10:00:00Z')
+      `,
+      ).run(middleId.id);
+
+      // Get the chain: root → middle → latest
+      const result = getRecurrenceChains(db, 10);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]?.insights).toHaveLength(3);
+      expect(result[0]?.span.firstDate).toBe('2026-07-13');
+      expect(result[0]?.span.lastDate).toBe('2026-07-15');
+      // If resolveInsight doesn't cache its DB fetches, span dates could become empty
+      expect(result[0]?.span.firstDate).not.toBe('');
+      expect(result[0]?.span.lastDate).not.toBe('');
+    });
   });
 
   describe('getCrossProjectRollup', () => {

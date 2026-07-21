@@ -33,7 +33,7 @@ const SONNET_SYSTEM_PROMPT = `You are a verification and scoring system for deve
 
 You receive:
 1. Candidate work items extracted from today's sessions (indexed with episodeId, category, text, evidenceRef, evidenceSnippet)
-2. Recent history of previously stored work items (from the last 5-7 days)
+2. Recent history of previously stored work items (from the last 7 days)
 
 Note: exact-duplicate collapsing and cross-day recurrence linking already
 happen downstream via embedding similarity — you do not need to solve those

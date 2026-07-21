@@ -3,6 +3,9 @@ import { Config } from '../config.js';
 import { Insight } from '../types.js';
 import { embedText } from './embeddings.js';
 import { unpackEmbedding } from '../db/schema.js';
+import { mapWithConcurrency } from './index.js';
+
+const EMBEDDING_CONCURRENCY = 5;
 
 /**
  * Plain in-JS cosine comparison against every recent/same-batch embedding is
@@ -74,13 +77,17 @@ export interface InsightWithEmbedding {
  * recurrence — two independent comparisons — never issue duplicate embedding
  * calls for the same text.
  */
-async function embedAll(insights: Insight[], config: Config): Promise<InsightWithEmbedding[]> {
-  const result: InsightWithEmbedding[] = [];
-  for (const insight of insights) {
-    const embedding = await embedText(insight.text, config);
-    result.push({ insight, embedding });
-  }
-  return result;
+export async function embedAll(
+  insights: Insight[],
+  config: Config,
+): Promise<InsightWithEmbedding[]> {
+  const embeddings = await mapWithConcurrency(insights, EMBEDDING_CONCURRENCY, (insight) =>
+    embedText(insight.text, config),
+  );
+  return insights.map((insight, i) => ({
+    insight,
+    embedding: embeddings[i],
+  }));
 }
 
 /**
@@ -156,9 +163,9 @@ export async function applyEmbeddingRecurrence(
     }));
   }
 
-  const recentEmbeddings = getRecentInsightEmbeddings(db, 7);
+  const recentEmbeddings = getRecentInsightEmbeddings(db, config.recentHistoryDays);
   const embedded = await embedAll(insights, config);
-  const deduped = dedupeInsightsByEmbedding(embedded, config.recurrenceSimilarityThreshold);
+  const deduped = dedupeInsightsByEmbedding(embedded, config.dedupeSimilarityThreshold);
 
   for (const item of deduped) {
     if (item.embedding === null) {

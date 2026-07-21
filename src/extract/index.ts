@@ -30,6 +30,20 @@ const HAIKU_CONCURRENCY = 5;
  * into fixed-size chunks keeps each call's expected output comfortably
  * under the token budget regardless of how large a day's session is.
  */
+/**
+ * Flat item count, not token-budget-based (unlike chunk/episodes.ts's
+ * MAX_EPISODE_TOKENS, which splits raw transcript lines that vary by orders
+ * of magnitude in size). Each candidate here is a short, Haiku-bounded
+ * {category, text, evidenceRef, evidenceSnippet} record with low per-item
+ * size variance, and the real constraint this batching protects is Sonnet's
+ * *output* token budget (max_tokens=16384 for the emitted insights array,
+ * roughly one insight per input candidate) — not input size. A flat count
+ * already tracks output size linearly and reliably; a token-counting input
+ * budget would add complexity to guard against a risk (huge input) that
+ * isn't the one actually in play here. Revisit only if real-world candidate
+ * text sizes are observed to vary wildly (e.g. evidenceSnippet growing much
+ * larger than intended).
+ */
 const SONNET_BATCH_SIZE = 40;
 const SONNET_CONCURRENCY = 3;
 
@@ -121,6 +135,9 @@ export async function runExtraction(
       return await verifyAndScore(batch, recentHistory, client);
     } catch (error) {
       if (error instanceof SonnetVerificationError) {
+        console.error(
+          `Skipping Sonnet batch of ${batch.length} candidates due to verification error`,
+        );
         return [];
       }
       throw error;

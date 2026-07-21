@@ -122,7 +122,7 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
           }));
 
           // Extract all episodes together
-          const allInsights = await runExtraction(persistedEpisodes, db, client);
+          const allInsights = await runExtraction(persistedEpisodes, db, client, config);
 
           // Apply embedding-based recurrence detection
           const insightsWithEmbeddings = await applyEmbeddingRecurrence(allInsights, db, config);
