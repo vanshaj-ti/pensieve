@@ -122,26 +122,28 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
             id: index,
           }));
 
-          // Extract all episodes in this date batch together
-          const allInsights = await runExtraction(persistedEpisodes, db, client);
+          let insightCount = 0;
 
-          // Apply embedding-based recurrence detection
-          const insightsWithEmbeddings = await applyEmbeddingRecurrence(allInsights, db, config);
-
-          // Group insights by their episode ID (which is the temp index)
-          const episodeToInsights = new Map<number, InsightWithEmbedding[]>();
-          for (const item of insightsWithEmbeddings) {
-            const episodeId = item.insight.episodeId;
-            if (!episodeToInsights.has(episodeId)) {
-              episodeToInsights.set(episodeId, []);
-            }
-            episodeToInsights.get(episodeId)!.push(item);
-          }
-
-          // Commit this date's episodes + insights in its own transaction
+          // Extract all episodes in this date batch together (only if not dry-run)
           if (!options.dryRun) {
+            const allInsights = await runExtraction(persistedEpisodes, db, client);
+
+            // Apply embedding-based recurrence detection
+            const insightsWithEmbeddings = await applyEmbeddingRecurrence(allInsights, db, config);
+
+            // Group insights by their episode ID (which is the temp index)
+            const episodeToInsights = new Map<number, InsightWithEmbedding[]>();
+            for (const item of insightsWithEmbeddings) {
+              const episodeId = item.insight.episodeId;
+              if (!episodeToInsights.has(episodeId)) {
+                episodeToInsights.set(episodeId, []);
+              }
+              episodeToInsights.get(episodeId)!.push(item);
+            }
+
+            // Commit this date's episodes + insights in its own transaction
             const dayInserts = db.transaction(() => {
-              let totalInserts = 0;
+              let insightInserts = 0;
               const insertEpisode = db.prepare(`
                 INSERT INTO episodes (date, project_dir, session_id, start_line, end_line, label)
                 VALUES (?, ?, ?, ?, ?, ?)
@@ -168,7 +170,6 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
                   label,
                 );
                 tempToRealId.set(tempId, info.lastInsertRowid as number);
-                totalInserts++;
               }
 
               // Insert insights using correct real episode IDs
@@ -187,7 +188,7 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
                     validated.recurrenceOf,
                     validated.createdAt,
                   );
-                  totalInserts++;
+                  insightInserts++;
 
                   if (embedding !== null) {
                     insertEmbedding.run(
@@ -200,10 +201,11 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
                 }
               }
 
-              return totalInserts;
+              return insightInserts;
             })();
 
             result.insightsPersisted += dayInserts;
+            insightCount = dayInserts;
 
             // Advance cursor past this date's max line
             const dateMaxLine = Math.max(...dayDrafts.map((d) => d.endLine));
@@ -216,6 +218,11 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
           dayFailedEarly = true;
           break;
         }
+      }
+
+      // Advance cursor to session max if all dates succeeded and not dry-run
+      if (!dayFailedEarly && !options.dryRun) {
+        advanceCursor(db, scanResult.projectDir, scanResult.sessionId, scanResult.maxLineNumber);
       }
 
       if (dayFailedEarly) {
