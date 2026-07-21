@@ -71,26 +71,23 @@ export interface EffortByCategoryPoint {
   total: number;
 }
 
-export interface RecurrenceChain {
-  rootId: number;
-  insights: Insight[];
-  span: { firstDate: string; lastDate: string };
+export interface FlaggedDirective {
+  humanLineNumber: number;
+  reason: string;
+  createdAt: string;
 }
 
-export interface ProjectRollup {
-  projectDir: string;
-  insightCount: number;
-}
-
-export interface ProjectEffortBreakdown {
-  projectDir: string;
-  toil: number;
-  judgment: number;
-  overhead: number;
+export interface EngagementBreakdown {
+  directive: number;
+  directiveNecessary: number;
+  directiveUnnecessary: number;
+  deliberative: number;
+  corrective: number;
+  acknowledgment: number;
   total: number;
-  toilRatio: number;
-  judgmentRatio: number;
-  overheadRatio: number;
+  engagementRatio: number | null;
+  longestDirectiveBurst: number;
+  flaggedDirectives: FlaggedDirective[];
 }
 
 export interface LabelSummary {

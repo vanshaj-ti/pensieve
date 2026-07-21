@@ -1,5 +1,5 @@
 import { useRoute, type Route } from './hooks/useRoute';
-import { AnalyticsPage } from './pages/AnalyticsPage';
+import { EngagementPage } from './pages/EngagementPage';
 import { SessionsPage } from './pages/SessionsPage';
 import { SessionDetailPage } from './pages/SessionDetailPage';
 import { BriefsPage } from './pages/BriefsPage';
@@ -150,7 +150,7 @@ export function App() {
               cursor: 'pointer',
             }}
           >
-            Analytics
+            Engagement
           </button>
           <button
             onClick={() => setRoute({ kind: 'projects' })}
@@ -217,7 +217,7 @@ export function App() {
       ) : route.kind === 'brief-detail' ? (
         <BriefDetailPage date={route.date} onNavigate={setRoute} />
       ) : (
-        <AnalyticsPage
+        <EngagementPage
           filter={routeToFilter(route)}
           scopeLabel={routeScopeLabel(route)}
           route={route}

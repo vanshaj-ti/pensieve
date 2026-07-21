@@ -9,18 +9,12 @@ import type http from 'http';
 import type { Application } from 'express';
 import {
   getInsightDates,
-  getCategoryTrend,
-  getTopInsights,
-  getTopInsightsCount,
-  getEffortBreakdown,
-  getEffortBreakdownTrend,
   getCrossProjectRollup,
-  getRecurrenceChains,
+  getEngagementBreakdown,
   getLabels,
   getProjects,
   getSessions,
   getSessionRuns,
-  getEffortByCategory,
   getDerivedInsights,
 } from '../src/analytics/index.js';
 
@@ -138,175 +132,28 @@ describe('dashboard server', () => {
     });
   });
 
-  describe('GET /api/category-trend', () => {
-    it('returns category trend matching getCategoryTrend', async () => {
-      const days = 30;
-      const res = await fetch(`http://localhost:${port}/api/category-trend?days=${days}`);
-      expect(res.status).toBe(200);
-      const apiData = await res.json();
-      const expected = getCategoryTrend(dbForAnalytics, days);
-      expect(apiData).toEqual(expected);
-    });
-
-    it('returns 400 for non-numeric days', async () => {
-      const res = await fetch(`http://localhost:${port}/api/category-trend?days=abc`);
-      expect(res.status).toBe(400);
-      const data = await res.json();
-      expect(data).toHaveProperty('error');
-    });
-
-    it('returns 400 for days with trailing garbage', async () => {
-      const res = await fetch(`http://localhost:${port}/api/category-trend?days=30junk`);
-      expect(res.status).toBe(400);
-    });
-  });
-
-  describe('GET /api/top-insights', () => {
-    it('returns paginated top insights with correct shape', async () => {
+  describe('GET /api/engagement-breakdown', () => {
+    it('returns engagement breakdown matching getEngagementBreakdown', async () => {
       const date = '2026-07-15';
-      const limit = 10;
-      const res = await fetch(
-        `http://localhost:${port}/api/top-insights?date=${date}&limit=${limit}`,
-      );
+      const res = await fetch(`http://localhost:${port}/api/engagement-breakdown?date=${date}`);
       expect(res.status).toBe(200);
       const apiData = await res.json();
-      expect(apiData).toHaveProperty('insights');
-      expect(apiData).toHaveProperty('total');
-      expect(apiData).toHaveProperty('totalPages');
-      expect(apiData).toHaveProperty('limit');
-      expect(apiData).toHaveProperty('offset');
-      expect(apiData.insights).toEqual(
-        getTopInsights(dbForAnalytics, { date }, limit, undefined, 0),
-      );
-    });
-
-    it('returns 400 for missing date', async () => {
-      const res = await fetch(`http://localhost:${port}/api/top-insights?limit=10`);
-      expect(res.status).toBe(400);
-    });
-
-    it('returns 400 for impossible date (Feb 31)', async () => {
-      const res = await fetch(`http://localhost:${port}/api/top-insights?date=2026-02-31&limit=10`);
-      expect(res.status).toBe(400);
-    });
-
-    it('returns 400 for limit with trailing garbage', async () => {
-      const res = await fetch(
-        `http://localhost:${port}/api/top-insights?date=2026-07-15&limit=10junk`,
-      );
-      expect(res.status).toBe(400);
-    });
-
-    it('respects offset parameter', async () => {
-      const date = '2026-07-15';
-      const limit = 5;
-      const page1Res = await fetch(
-        `http://localhost:${port}/api/top-insights?date=${date}&limit=${limit}&offset=0`,
-      );
-      const page2Res = await fetch(
-        `http://localhost:${port}/api/top-insights?date=${date}&limit=${limit}&offset=${limit}`,
-      );
-      expect(page1Res.status).toBe(200);
-      expect(page2Res.status).toBe(200);
-      const page1 = await page1Res.json();
-      const page2 = await page2Res.json();
-      expect(page1.insights).toEqual(getTopInsights(dbForAnalytics, { date }, limit, undefined, 0));
-      expect(page2.insights).toEqual(
-        getTopInsights(dbForAnalytics, { date }, limit, undefined, limit),
-      );
-    });
-
-    it('returns 400 for invalid offset (negative)', async () => {
-      const res = await fetch(
-        `http://localhost:${port}/api/top-insights?date=2026-07-15&limit=10&offset=-1`,
-      );
-      expect(res.status).toBe(400);
-    });
-
-    it('returns 400 for invalid offset (non-numeric)', async () => {
-      const res = await fetch(
-        `http://localhost:${port}/api/top-insights?date=2026-07-15&limit=10&offset=garbage`,
-      );
-      expect(res.status).toBe(400);
-    });
-
-    it('includes total and totalPages', async () => {
-      const date = '2026-07-15';
-      const limit = 5;
-      const res = await fetch(
-        `http://localhost:${port}/api/top-insights?date=${date}&limit=${limit}`,
-      );
-      expect(res.status).toBe(200);
-      const apiData = await res.json();
-      const expectedTotal = getTopInsightsCount(dbForAnalytics, { date });
-      const expectedTotalPages = Math.max(1, Math.ceil(expectedTotal / limit));
-      expect(apiData.total).toBe(expectedTotal);
-      expect(apiData.totalPages).toBe(expectedTotalPages);
-    });
-
-    it('accepts fromDate/toDate range params', async () => {
-      const res = await fetch(
-        `http://localhost:${port}/api/top-insights?fromDate=2026-07-15&toDate=2026-07-16&limit=10`,
-      );
-      expect(res.status).toBe(200);
-      const apiData = await res.json();
-      expect(apiData).toHaveProperty('insights');
-      expect(Array.isArray(apiData.insights)).toBe(true);
-    });
-
-    it('returns 400 when fromDate is provided without toDate', async () => {
-      const res = await fetch(
-        `http://localhost:${port}/api/top-insights?fromDate=2026-07-15&limit=10`,
-      );
-      expect(res.status).toBe(400);
-    });
-
-    it('returns 400 when fromDate > toDate', async () => {
-      const res = await fetch(
-        `http://localhost:${port}/api/top-insights?fromDate=2026-07-16&toDate=2026-07-15&limit=10`,
-      );
-      expect(res.status).toBe(400);
-    });
-  });
-
-  describe('GET /api/effort-breakdown', () => {
-    it('returns effort breakdown matching getEffortBreakdown', async () => {
-      const date = '2026-07-15';
-      const res = await fetch(`http://localhost:${port}/api/effort-breakdown?date=${date}`);
-      expect(res.status).toBe(200);
-      const apiData = await res.json();
-      const expected = getEffortBreakdown(dbForAnalytics, { date });
+      const expected = getEngagementBreakdown(dbForAnalytics, { date });
       expect(apiData).toEqual(expected);
     });
 
     it('returns 400 for missing date', async () => {
-      const res = await fetch(`http://localhost:${port}/api/effort-breakdown`);
+      const res = await fetch(`http://localhost:${port}/api/engagement-breakdown`);
       expect(res.status).toBe(400);
     });
 
     it('accepts fromDate/toDate range params', async () => {
       const res = await fetch(
-        `http://localhost:${port}/api/effort-breakdown?fromDate=2026-07-15&toDate=2026-07-16`,
+        `http://localhost:${port}/api/engagement-breakdown?fromDate=2026-07-15&toDate=2026-07-16`,
       );
       expect(res.status).toBe(200);
       const apiData = await res.json();
       expect(apiData).toHaveProperty('total');
-    });
-  });
-
-  describe('GET /api/effort-breakdown-trend', () => {
-    it('returns effort breakdown trend matching getEffortBreakdownTrend', async () => {
-      const days = 30;
-      const res = await fetch(`http://localhost:${port}/api/effort-breakdown-trend?days=${days}`);
-      expect(res.status).toBe(200);
-      const apiData = await res.json();
-      const expected = getEffortBreakdownTrend(dbForAnalytics, days);
-      expect(apiData).toEqual(expected);
-    });
-
-    it('returns 400 for non-numeric days', async () => {
-      const res = await fetch(`http://localhost:${port}/api/effort-breakdown-trend?days=xyz`);
-      expect(res.status).toBe(400);
     });
   });
 
@@ -332,22 +179,6 @@ describe('dashboard server', () => {
       expect(res.status).toBe(200);
       const apiData = await res.json();
       expect(Array.isArray(apiData)).toBe(true);
-    });
-  });
-
-  describe('GET /api/recurrence-chains', () => {
-    it('returns recurrence chains matching getRecurrenceChains', async () => {
-      const days = 30;
-      const res = await fetch(`http://localhost:${port}/api/recurrence-chains?days=${days}`);
-      expect(res.status).toBe(200);
-      const apiData = await res.json();
-      const expected = getRecurrenceChains(dbForAnalytics, days);
-      expect(apiData).toEqual(expected);
-    });
-
-    it('returns 400 for non-numeric days', async () => {
-      const res = await fetch(`http://localhost:${port}/api/recurrence-chains?days=notanumber`);
-      expect(res.status).toBe(400);
     });
   });
 
@@ -423,51 +254,6 @@ describe('dashboard server', () => {
         body: JSON.stringify({ projectDir: '/project-a' }),
       });
       expect(res.status).toBe(400);
-    });
-  });
-
-  describe('filter query params on existing routes', () => {
-    it('/api/top-insights scopes to a project via the project query param', async () => {
-      const res = await fetch(
-        `http://localhost:${port}/api/top-insights?date=2026-07-15&limit=10&project=/project-b`,
-      );
-      expect(res.status).toBe(200);
-      const apiData = await res.json();
-      const expected = getTopInsights(
-        dbForAnalytics,
-        { date: '2026-07-15' },
-        10,
-        {
-          projectDir: '/project-b',
-        },
-        0,
-      );
-      expect(apiData.insights).toEqual(expected);
-    });
-  });
-
-  describe('GET /api/effort-by-category', () => {
-    it('returns effort-by-category matching getEffortByCategory', async () => {
-      const date = '2026-07-15';
-      const res = await fetch(`http://localhost:${port}/api/effort-by-category?date=${date}`);
-      expect(res.status).toBe(200);
-      const apiData = await res.json();
-      const expected = getEffortByCategory(dbForAnalytics, { date });
-      expect(apiData).toEqual(expected);
-    });
-
-    it('returns 400 for missing date', async () => {
-      const res = await fetch(`http://localhost:${port}/api/effort-by-category`);
-      expect(res.status).toBe(400);
-    });
-
-    it('accepts fromDate/toDate range params', async () => {
-      const res = await fetch(
-        `http://localhost:${port}/api/effort-by-category?fromDate=2026-07-15&toDate=2026-07-16`,
-      );
-      expect(res.status).toBe(200);
-      const apiData = await res.json();
-      expect(Array.isArray(apiData)).toBe(true);
     });
   });
 
