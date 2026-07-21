@@ -231,6 +231,7 @@ export async function writeBrief(
 
   // Fetch analytics data
   const topInsights = getTopInsights(db, { date }, 5);
+  // 30-day window for recurring patterns is intentionally separate from recentHistoryDays (which governs Sonnet/embedding context window).
   const recurrenceChains = getRecurrenceChains(db, 30);
   const crossProjectRollup = getCrossProjectRollup(db, { date });
   const effortBreakdown = getEffortBreakdown(db, { date });

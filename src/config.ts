@@ -24,8 +24,12 @@ export interface Config {
   embeddingsExtraHeaders: Record<string, string>;
   /** Path component of embeddings endpoint (default '/v1/embeddings'). */
   embeddingsPath: string;
-  /** Cosine similarity threshold for detecting recurrence (0-1, default 0.90). */
+  /** Cosine similarity threshold for detecting cross-day recurrence (0-1, default 0.90). */
   recurrenceSimilarityThreshold: number;
+  /** Cosine similarity threshold for same-batch duplicate collapsing (0-1, default 0.95). */
+  dedupeSimilarityThreshold: number;
+  /** Days of history to look back for recent insights (default 7). */
+  recentHistoryDays: number;
 }
 
 function defaultConfig(): Config {
@@ -42,6 +46,8 @@ function defaultConfig(): Config {
     embeddingsExtraHeaders: {},
     embeddingsPath: '/v1/embeddings',
     recurrenceSimilarityThreshold: 0.9,
+    dedupeSimilarityThreshold: 0.95,
+    recentHistoryDays: 7,
   };
 }
 
@@ -123,6 +129,22 @@ function envConfig(): Partial<Config> {
     const parsed = Number(value);
     if (!Number.isNaN(parsed) && parsed > 0 && parsed <= 1) {
       env.recurrenceSimilarityThreshold = parsed;
+    }
+  }
+
+  if (process.env.PENSIEVE_DEDUPE_SIMILARITY_THRESHOLD) {
+    const value = process.env.PENSIEVE_DEDUPE_SIMILARITY_THRESHOLD.trim();
+    const parsed = Number(value);
+    if (!Number.isNaN(parsed) && parsed > 0 && parsed <= 1) {
+      env.dedupeSimilarityThreshold = parsed;
+    }
+  }
+
+  if (process.env.PENSIEVE_RECENT_HISTORY_DAYS) {
+    const value = process.env.PENSIEVE_RECENT_HISTORY_DAYS.trim();
+    const parsed = Number(value);
+    if (Number.isInteger(parsed) && parsed > 0) {
+      env.recentHistoryDays = parsed;
     }
   }
 
