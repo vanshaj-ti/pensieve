@@ -263,6 +263,103 @@ describe('pipeline', () => {
     expect(cursor).toBe(1);
   });
 
+  it('retry after partial failure: does not re-extract already-persisted day, only the failed one', async () => {
+    const now = new Date().toISOString();
+    const day1Line = {
+      lineNumber: 1,
+      timestamp: now,
+      kind: 'tool' as const,
+      toolName: 'test',
+      text: 'day 1 line',
+    };
+    const day2Line = {
+      lineNumber: 11,
+      timestamp: new Date(new Date(now).getTime() + 25 * 60 * 60000).toISOString(), // Next day
+      kind: 'tool' as const,
+      toolName: 'test',
+      text: 'day 2 line',
+    };
+
+    const { scanNewLines } = await import('../src/ingest/index.js');
+    const { runExtraction } = await import('../src/extract/index.js');
+
+    // --- Run 1: day 1 succeeds, day 2 fails ---
+    vi.mocked(scanNewLines).mockResolvedValueOnce([
+      {
+        projectDir: '/tmp/test-project',
+        sessionId: 'session-1',
+        filePath: '/tmp/test-project/session-1.jsonl',
+        lines: [day1Line, day2Line],
+        maxLineNumber: 11,
+      },
+    ]);
+    vi.mocked(runExtraction).mockResolvedValueOnce([
+      {
+        episodeId: 0,
+        category: 'architecture_decisions',
+        text: 'Day 1 insight',
+        evidenceRef: 'line 1',
+        significanceScore: 0.8,
+        verifiedByGit: null,
+        recurrenceOf: null,
+        createdAt: now,
+      },
+    ]);
+    vi.mocked(runExtraction).mockRejectedValueOnce(new Error('API error on day 2'));
+
+    const firstRun = await runDailyAnalysis({ db, force: false });
+    expect(firstRun.sessionsFailed).toBe(1);
+    expect(runExtraction).toHaveBeenCalledTimes(2);
+
+    const cursorAfterFirstRun = getCursor(db, '/tmp/test-project', 'session-1');
+    expect(cursorAfterFirstRun).toBe(1); // stopped before day 2, matching the partial-persistence test above
+
+    // --- Run 2 (retry): real scanNewLines would only re-scan lines past the
+    // advanced cursor (line 1) — i.e. day 2's line only. This is the crux of
+    // the intake requirement: a retry must NOT re-run extraction for day 1,
+    // whose episode+insight already committed in run 1's own transaction. ---
+    vi.mocked(scanNewLines).mockResolvedValueOnce([
+      {
+        projectDir: '/tmp/test-project',
+        sessionId: 'session-1',
+        filePath: '/tmp/test-project/session-1.jsonl',
+        lines: [day2Line],
+        maxLineNumber: 11,
+      },
+    ]);
+    vi.mocked(runExtraction).mockResolvedValueOnce([
+      {
+        episodeId: 0,
+        category: 'bug_fix',
+        text: 'Day 2 insight (retry succeeded)',
+        evidenceRef: 'line 11',
+        significanceScore: 0.7,
+        verifiedByGit: null,
+        recurrenceOf: null,
+        createdAt: now,
+      },
+    ]);
+
+    const secondRun = await runDailyAnalysis({ db, force: false });
+
+    // Only day 2's extraction ran on retry — not day 1's again.
+    expect(runExtraction).toHaveBeenCalledTimes(3);
+    expect(secondRun.sessionsFailed).toBe(0);
+    expect(secondRun.insightsPersisted).toBe(1);
+
+    // Both days' insights are now persisted — day 1 from run 1, day 2 from run 2.
+    const rows = db.prepare('SELECT text FROM insights ORDER BY id').all() as Array<{
+      text: string;
+    }>;
+    expect(rows).toHaveLength(2);
+    expect(rows[0].text).toBe('Day 1 insight');
+    expect(rows[1].text).toBe('Day 2 insight (retry succeeded)');
+
+    // Cursor now advances all the way to maxLineNumber.
+    const cursorAfterSecondRun = getCursor(db, '/tmp/test-project', 'session-1');
+    expect(cursorAfterSecondRun).toBe(11);
+  });
+
   it('dry-run skips persistence and cursor advancement', async () => {
     // Pre-populate sessions table
     db.prepare(
@@ -316,6 +413,9 @@ describe('pipeline', () => {
     expect(result.episodesFound).toBe(1);
     expect(result.insightsPersisted).toBe(0);
     expect(result.sessionsProcessed).toBe(1);
+
+    // Dry-run must NOT call runExtraction (no paid API calls)
+    expect(vi.mocked(runExtraction)).not.toHaveBeenCalled();
 
     // Cursor should NOT advance
     const cursor = getCursor(db, '/tmp/project', 'session-1');
