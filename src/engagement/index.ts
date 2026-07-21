@@ -110,7 +110,25 @@ export async function runEngagementAnalysis(
         return [];
       }
       try {
-        const candidates = await classifyTurns(episode, pairs, client);
+        const rawCandidates = await classifyTurns(episode, pairs, client);
+        // Haiku can emit two classifications for the same humanLineNumber
+        // in one response (real bug, found live: two rows persisted with
+        // identical episode_id/human_line_number/created_at, meaning the
+        // duplicate came from a single tool_use call, not a bisection
+        // re-run — classifyTurnsForPairs's slice(0,mid)/slice(mid) split
+        // never overlaps). Keep the first occurrence per line; nothing in
+        // the schema enforces this itself.
+        const seenLines = new Set<number>();
+        const candidates = rawCandidates.filter((c) => {
+          if (seenLines.has(c.humanLineNumber)) {
+            console.error(
+              `Dropping duplicate engagement classification for episode ${episode.sessionId}:${episode.startLine}-${episode.endLine}, human line ${c.humanLineNumber}`,
+            );
+            return false;
+          }
+          seenLines.add(c.humanLineNumber);
+          return true;
+        });
         const persisted = candidates.map((c) => ({ ...c, episodeId: episode.id }));
 
         if (options.briefsDir && options.label) {

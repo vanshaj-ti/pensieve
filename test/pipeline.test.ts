@@ -11,15 +11,30 @@ import type Anthropic from '@anthropic-ai/sdk';
 
 vi.mock('../src/ingest/index.js');
 vi.mock('../src/extract/index.js');
+// pipeline.ts now runs runEngagementAnalysis concurrently with
+// runExtraction on every date-batch — tests that don't explicitly
+// override this mock would make a real Anthropic API call, which either
+// fails (no/invalid key) or returns unexpected data, causing a
+// "FOREIGN KEY constraint failed" on the engagement_turns insert (real
+// bug found live when the "multi-episode day" test began failing after
+// the engagement feature was added to pipeline.ts). Default to [] so
+// existing insight-focused tests stay unaffected.
+vi.mock('../src/engagement/index.js', () => ({
+  runEngagementAnalysis: vi.fn().mockResolvedValue([]),
+}));
 
 describe('pipeline', () => {
   let tempDir: string;
   let db: Database.Database;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     tempDir = mkdtempSync('pensieve-test-');
     db = openDb(join(tempDir, 'test.db'));
+    // Re-apply the default after clearAllMocks — clearAllMocks resets all
+    // mock implementations, not just call counts.
+    const { runEngagementAnalysis } = await import('../src/engagement/index.js');
+    vi.mocked(runEngagementAnalysis).mockResolvedValue([]);
   });
 
   afterEach(() => {
@@ -128,7 +143,16 @@ describe('pipeline', () => {
   });
 
   it('multi-episode day: insights correctly associated to source episodes', async () => {
-    const now = new Date().toISOString();
+    // Pinned mid-day timestamps, not new Date() + offset — this test's
+    // "same day, two episodes" premise is flaky/time-dependent near local
+    // midnight: new Date() + 30min can cross into the next calendar day
+    // (bucketByDay buckets by LOCAL date), silently splitting what the
+    // test assumes is one date-batch into two, each with its own temp
+    // episode id 0 — the mocked runExtraction's episodeId:1 insight then
+    // has no matching real episode in the second batch and fails its
+    // FOREIGN KEY constraint on insert. Real bug found live (this test
+    // failed exactly once IST local time was within 30 min of midnight).
+    const now = '2026-07-15T10:00:00.000Z';
     const scanResult: ScanResult = {
       projectDir: '/tmp/test-project',
       sessionId: 'session-1',
@@ -588,9 +612,17 @@ describe('pipeline', () => {
 
     const { scanNewLines } = await import('../src/ingest/index.js');
     const { runExtraction } = await import('../src/extract/index.js');
+    const { runEngagementAnalysis: realRunEngagementAnalysis } = await vi.importActual<
+      typeof import('../src/engagement/index.js')
+    >('../src/engagement/index.js');
+    const { runEngagementAnalysis } = await import('../src/engagement/index.js');
 
     vi.mocked(scanNewLines).mockResolvedValueOnce([scanResult]);
     vi.mocked(runExtraction).mockResolvedValueOnce(insights);
+    // This test exercises the real turn-pair-derivation -> Haiku-call ->
+    // dedup chain (not the beforeEach's default []-returning mock) to
+    // verify the actual insert path handles a real boolean value.
+    vi.mocked(runEngagementAnalysis).mockImplementation(realRunEngagementAnalysis);
 
     const mockCreate = vi.fn().mockResolvedValueOnce({
       content: [

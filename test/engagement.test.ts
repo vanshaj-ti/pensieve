@@ -49,6 +49,20 @@ function toolResultLine(
   };
 }
 
+function metaUserLine(
+  lineNumber: number,
+  text: string,
+  timestamp = '2026-07-15T10:00:00Z',
+): ParsedLine {
+  return {
+    lineNumber,
+    type: 'user',
+    timestamp,
+    hasToolUse: false,
+    raw: { type: 'user', timestamp, isMeta: true, message: { content: text } },
+  };
+}
+
 function assistantLine(
   lineNumber: number,
   text: string,
@@ -130,6 +144,27 @@ describe('Engagement: turn-pair derivation', () => {
     // stays in the agent cluster for context).
     expect(pairs).toHaveLength(1);
     expect(pairs[0].humanLineNumber).toBe(3);
+  });
+
+  it('Case 2d: an isMeta:true line (stop-hook feedback) is NOT treated as a human turn (regression)', () => {
+    // Real bug: found live in the brief output — a stop-hook-feedback turn
+    // ("Stop hook feedback:\nAgent hook condition was not met...") doesn't
+    // start with any of SYSTEM_INJECTED_RE's string markers, but Claude
+    // Code's own JSONL flags it (and <system-reminder>/<local-command-
+    // caveat> blocks, slash-command re-invocations) with isMeta: true —
+    // a structural signal, checked independently of content text.
+    const lines = [
+      assistantLine(1, 'Dispatching task 4.'),
+      metaUserLine(
+        2,
+        'Stop hook feedback:\nAgent hook condition was not met: WIP tasks remain: [4].',
+      ),
+      userLine(3, 'Continue with task 5.'),
+    ];
+    const pairs = deriveTurnPairs(lines);
+    expect(pairs).toHaveLength(1);
+    expect(pairs[0].humanLineNumber).toBe(3);
+    expect(pairs[0].agentTurnText).toContain('Stop hook feedback');
   });
 
   it('Case 3: a human turn with no preceding agent activity is skipped', () => {
@@ -378,5 +413,82 @@ describe('Engagement: Haiku classification pass', () => {
     await expect(classifyTurns(episode, pairs, client)).rejects.toThrow(
       EngagementClassificationError,
     );
+  });
+});
+
+describe('Engagement: orchestrator dedup', () => {
+  let client: Anthropic;
+  let mockCreate: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    mockCreate = vi.fn();
+    const mockClient = {
+      beta: {
+        promptCaching: {
+          messages: {
+            create: mockCreate,
+          },
+        },
+      },
+    };
+    (Anthropic as unknown as ReturnType<typeof vi.fn>).mockReturnValue(mockClient);
+    client = new Anthropic();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('Case 15: two classifications for the same human line in one response are deduped, keeping the first (regression)', async () => {
+    // Real bug found live: a single Haiku tool_use response emitted two
+    // candidates with the same humanLineNumber (confirmed via identical
+    // episode_id/human_line_number/created_at in the persisted rows —
+    // not a bisection re-run, which never overlaps its own slices).
+    const { runEngagementAnalysis } = await import('../src/engagement/index.js');
+    const episode: EpisodeDraft = {
+      date: '2026-07-15',
+      projectDir: '/test/project',
+      sessionId: 'session-1',
+      startLine: 1,
+      endLine: 5,
+      lines: [assistantLine(1, 'Should I use approach A or B?'), userLine(2, 'Use approach B.')],
+    };
+    const persistedEpisode = { ...episode, id: 42 };
+
+    mockCreate.mockResolvedValueOnce({
+      content: [
+        {
+          type: 'tool_use',
+          name: 'emit_engagement_classifications',
+          input: {
+            candidates: [
+              {
+                humanLineNumber: 2,
+                classification: 'deliberative',
+                directiveNecessary: null,
+                reason: 'first classification',
+              },
+              {
+                humanLineNumber: 2,
+                classification: 'directive',
+                directiveNecessary: false,
+                reason: 'duplicate classification for the same line',
+              },
+            ],
+          },
+        },
+      ],
+    });
+
+    const result = await runEngagementAnalysis([persistedEpisode], {} as never, client);
+    expect(result).toEqual([
+      {
+        humanLineNumber: 2,
+        classification: 'deliberative',
+        directiveNecessary: null,
+        reason: 'first classification',
+        episodeId: 42,
+      },
+    ]);
   });
 });
