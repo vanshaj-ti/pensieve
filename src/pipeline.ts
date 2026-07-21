@@ -103,25 +103,26 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
         }
       }
 
-      // Collect extraction results and episode mappings before transaction
-      interface ExtractedDay {
-        date: string;
-        drafts: typeof drafts;
-        episodeToInsights: Map<number, InsightWithEmbedding[]>; // Map temp episode ID to its insights + embeddings
-      }
+      // Process each date-batch independently: extract → persist → advance cursor.
+      // This granularity (date-batch, not per-episode) balances two concerns:
+      // (1) Sonnet's extraction pools episodes within a date for duplicate-merging
+      //     and shared context — calling runExtraction per-date preserves that behavior.
+      // (2) A failure in one date's extraction no longer discards already-succeeded dates —
+      //     each date's transaction commits independently, and the cursor advances past it
+      //     before the next date is even attempted.
+      // A separate, parallel fix (Sonnet's per-batch error handling) handles error isolation
+      // within extraction's verify/score step, making them complementary for bounded recovery.
+      let dayFailedEarly = false;
 
-      const extractedDays: ExtractedDay[] = [];
-
-      // Run extraction for all days only if not dry-run (async work outside transaction)
-      if (!options.dryRun) {
-        for (const [date, dayDrafts] of draftsByDate) {
+      for (const [date, dayDrafts] of draftsByDate) {
+        try {
           // Build persisted episodes with temp IDs (index)
           const persistedEpisodes = dayDrafts.map((draft, index) => ({
             ...draft,
             id: index,
           }));
 
-          // Extract all episodes together
+          // Extract all episodes in this date batch together
           const allInsights = await runExtraction(persistedEpisodes, db, client);
 
           // Apply embedding-based recurrence detection
@@ -137,36 +138,27 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
             episodeToInsights.get(episodeId)!.push(item);
           }
 
-          extractedDays.push({
-            date,
-            drafts: dayDrafts,
-            episodeToInsights,
-          });
-        }
-      }
+          // Commit this date's episodes + insights in its own transaction
+          if (!options.dryRun) {
+            const dayInserts = db.transaction(() => {
+              let totalInserts = 0;
+              const insertEpisode = db.prepare(`
+                INSERT INTO episodes (date, project_dir, session_id, start_line, end_line, label)
+                VALUES (?, ?, ?, ?, ?, ?)
+              `);
+              const insertInsight = db.prepare(`
+                INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, effort_class, verified_by_git, recurrence_of, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+              `);
+              const insertEmbedding = db.prepare(`
+                INSERT INTO insight_embeddings (insight_id, embedding, model, created_at)
+                VALUES (?, ?, ?, ?)
+              `);
 
-      // Wrap all DB writes in a single transaction
-      const sessionInserts = !options.dryRun
-        ? db.transaction(() => {
-            let totalInserts = 0;
-            const insertEpisode = db.prepare(`
-              INSERT INTO episodes (date, project_dir, session_id, start_line, end_line, label)
-              VALUES (?, ?, ?, ?, ?, ?)
-            `);
-            const insertInsight = db.prepare(`
-              INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, effort_class, verified_by_git, recurrence_of, created_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `);
-            const insertEmbedding = db.prepare(`
-              INSERT INTO insight_embeddings (insight_id, embedding, model, created_at)
-              VALUES (?, ?, ?, ?)
-            `);
-
-            for (const day of extractedDays) {
               // Insert all episodes and map temp IDs to real IDs
               const tempToRealId = new Map<number, number>();
-              for (let tempId = 0; tempId < day.drafts.length; tempId++) {
-                const draft = day.drafts[tempId];
+              for (let tempId = 0; tempId < dayDrafts.length; tempId++) {
+                const draft = dayDrafts[tempId];
                 const info = insertEpisode.run(
                   draft.date,
                   draft.projectDir,
@@ -176,10 +168,11 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
                   label,
                 );
                 tempToRealId.set(tempId, info.lastInsertRowid as number);
+                totalInserts++;
               }
 
               // Insert insights using correct real episode IDs
-              for (const [tempEpisodeId, insightsWithEmbeddings] of day.episodeToInsights) {
+              for (const [tempEpisodeId, insightsWithEmbeddings] of episodeToInsights) {
                 const realEpisodeId = tempToRealId.get(tempEpisodeId) ?? 0;
                 for (const { insight, embedding } of insightsWithEmbeddings) {
                   const validated = InsightSchema.parse(insight);
@@ -194,6 +187,7 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
                     validated.recurrenceOf,
                     validated.createdAt,
                   );
+                  totalInserts++;
 
                   if (embedding !== null) {
                     insertEmbedding.run(
@@ -203,34 +197,32 @@ export async function runDailyAnalysis(options: PipelineOptions = {}): Promise<P
                       validated.createdAt,
                     );
                   }
-
-                  totalInserts++;
                 }
               }
 
-              if (!result.datesTouched.includes(day.date)) {
-                result.datesTouched.push(day.date);
-              }
-            }
+              return totalInserts;
+            })();
 
-            return totalInserts;
-          })()
-        : extractedDays.reduce((sum, day) => {
-            let daySum = 0;
-            for (const insights of day.episodeToInsights.values()) {
-              daySum += insights.length;
-            }
-            return sum + daySum;
-          }, 0);
+            result.insightsPersisted += dayInserts;
 
-      result.insightsPersisted += sessionInserts;
-
-      // Only advance cursor after successful persistence
-      if (!options.dryRun) {
-        advanceCursor(db, scanResult.projectDir, scanResult.sessionId, scanResult.maxLineNumber);
+            // Advance cursor past this date's max line
+            const dateMaxLine = Math.max(...dayDrafts.map((d) => d.endLine));
+            advanceCursor(db, scanResult.projectDir, scanResult.sessionId, dateMaxLine);
+          }
+        } catch (dayError) {
+          console.error(
+            `Error processing date ${date} in session ${scanResult.sessionId}: ${dayError}`,
+          );
+          dayFailedEarly = true;
+          break;
+        }
       }
 
-      result.sessionsProcessed++;
+      if (dayFailedEarly) {
+        result.sessionsFailed++;
+      } else {
+        result.sessionsProcessed++;
+      }
     } catch (error) {
       console.error(
         `Error processing session ${scanResult.projectDir}/${scanResult.sessionId}:`,
