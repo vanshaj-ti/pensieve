@@ -20,6 +20,7 @@ import {
   getWorkItemsForRun,
   insertDerivedInsights,
   getDerivedInsights,
+  resolveInsight,
 } from '../src/analytics/index.js';
 
 describe('analytics', () => {
@@ -567,6 +568,107 @@ describe('analytics', () => {
       expect(result[0]?.insights[0]?.text).toBe('Root');
       expect(result[0]?.insights[1]?.text).toBe('Middle');
       expect(result[0]?.insights[2]?.text).toBe('Last');
+    });
+
+    it('resolveInsight helper caches ancestors fetched from DB into insightMap', () => {
+      // Verify that the resolveInsight helper both fetches missing IDs from the DB
+      // and writes them back to the map. Chain: root → middle → latest where
+      // root and middle are OUTSIDE a 10-day window but must still be fetched and cached
+      // for firstDate/lastDate calculation. Root at 2026-07-05, middle at 2026-07-08,
+      // latest at 2026-07-20 means with a 10-day window from 2026-07-20 backwards,
+      // only the latest is in-window; root and middle must be fetched from DB.
+      db.prepare(
+        `
+        INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
+        VALUES ('2026-07-05', '/tmp/project', 'session-1', 1, 5),
+               ('2026-07-08', '/tmp/project', 'session-1', 6, 10),
+               ('2026-07-20', '/tmp/project', 'session-1', 11, 15)
+      `,
+      ).run();
+
+      db.prepare(
+        `
+        INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
+        VALUES (1, 'friction_audit', 'Root insight', 'ref', 0.8, NULL, NULL, '2026-07-05T10:00:00Z')
+      `,
+      ).run();
+
+      const rootId = db.prepare('SELECT last_insert_rowid() as id').get() as { id: number };
+
+      db.prepare(
+        `
+        INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
+        VALUES (2, 'friction_audit', 'Middle recurrence', 'ref', 0.7, NULL, ?, '2026-07-08T10:00:00Z')
+      `,
+      ).run(rootId.id);
+
+      const middleId = db.prepare('SELECT last_insert_rowid() as id').get() as { id: number };
+
+      db.prepare(
+        `
+        INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
+        VALUES (3, 'friction_audit', 'Latest recurrence', 'ref', 0.6, NULL, ?, '2026-07-20T10:00:00Z')
+      `,
+      ).run(middleId.id);
+
+      // Get the chain using a 10-day window: only 2026-07-20 is in window; root and middle must be DB-fetched
+      const result = getRecurrenceChains(db, 10);
+
+      expect(result).toHaveLength(1);
+      expect(result[0]?.insights).toHaveLength(3);
+      expect(result[0]?.span.firstDate).toBe('2026-07-05');
+      expect(result[0]?.span.lastDate).toBe('2026-07-20');
+      // If resolveInsight doesn't cache its DB fetches into insightMap, these would be empty strings
+      expect(result[0]?.span.firstDate).not.toBe('');
+      expect(result[0]?.span.lastDate).not.toBe('');
+    });
+  });
+
+  describe('resolveInsight helper', () => {
+    it('fetches missing ID from DB and writes it into insightMap', () => {
+      db.prepare(
+        `
+        INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
+        VALUES ('2026-07-15', '/tmp/project', 'session-1', 1, 10)
+      `,
+      ).run();
+
+      db.prepare(
+        `
+        INSERT INTO insights (episode_id, category, text, evidence_ref, significance_score, verified_by_git, recurrence_of, created_at)
+        VALUES (1, 'friction_audit', 'Test insight', 'ref', 0.8, NULL, NULL, '2026-07-15T10:00:00Z')
+      `,
+      ).run();
+
+      const insertedId = db.prepare('SELECT last_insert_rowid() as id').get() as { id: number };
+
+      // Start with empty map (cache miss scenario)
+      const insightMap = new Map();
+
+      // resolveInsight should fetch from DB and populate the map
+      const result = resolveInsight(db, insightMap, insertedId.id);
+
+      // Verify row was fetched
+      expect(result).toBeDefined();
+      expect(result?.text).toBe('Test insight');
+
+      // Verify row was written into the map for next lookup
+      expect(insightMap.has(insertedId.id)).toBe(true);
+      expect(insightMap.get(insertedId.id)?.text).toBe('Test insight');
+
+      // Subsequent call uses the cache, not the DB
+      const cachedResult = resolveInsight(db, insightMap, insertedId.id);
+      expect(cachedResult).toEqual(result);
+      expect(cachedResult).toBe(result); // Same object reference from map
+    });
+
+    it('returns undefined for non-existent ID and does not write to map', () => {
+      const insightMap = new Map();
+
+      const result = resolveInsight(db, insightMap, 99999);
+
+      expect(result).toBeUndefined();
+      expect(insightMap.has(99999)).toBe(false);
     });
   });
 
