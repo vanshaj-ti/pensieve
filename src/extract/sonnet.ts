@@ -92,155 +92,177 @@ highlighted insight. recurrenceOf may be left null for every candidate —
 the embedding-based recurrence pass downstream will set it independently;
 do not spend effort guessing it from the pasted history.`;
 
+export class SonnetVerificationError extends Error {
+  constructor(
+    public readonly batchSize: number,
+    cause: unknown,
+  ) {
+    super(`Sonnet verify/score failed for a batch of ${batchSize} candidates`);
+    this.cause = cause;
+  }
+}
+
 export async function verifyAndScore(
   candidatesWithSource: CandidateWithSource[],
   recentHistory: Insight[],
   client: Anthropic,
 ): Promise<Insight[]> {
-  const candidatesList = candidatesWithSource
-    .map(
-      (cws, idx) => `
+  try {
+    const candidatesList = candidatesWithSource
+      .map(
+        (cws, idx) => `
 [Candidate ${idx}]
 Episode ID: ${cws.episodeId}
 Category: ${cws.candidate.category}
 Text: ${cws.candidate.text}
 Evidence (${cws.candidate.evidenceRef}): "${cws.candidate.evidenceSnippet}"
 `,
-    )
-    .join('\n');
+      )
+      .join('\n');
 
-  const historyList =
-    recentHistory.length > 0
-      ? recentHistory
-          .map(
-            (insight) => `
+    const historyList =
+      recentHistory.length > 0
+        ? recentHistory
+            .map(
+              (insight) => `
 - ID ${insight.id}: [${insight.category}] ${insight.text} (created: ${insight.createdAt})
 `,
-          )
-          .join('\n')
-      : '(No recent history)';
+            )
+            .join('\n')
+        : '(No recent history)';
 
-  const userMessage = `Today's candidates:
+    const userMessage = `Today's candidates:
 ${candidatesList}
-
-Recent history (last 5-7 days):
-${historyList}
 
 Process these candidates: reject hallucinations, merge near-duplicates, score significance (1-5), polish text, and flag recurrence against history.`;
 
-  // See haiku.ts for why this must be called directly, not via a detached
-  // function reference — casting the method strips its `this` binding.
-  const response = (await client.beta.promptCaching.messages.create({
-    model: 'claude-sonnet-5',
-    max_tokens: 16384,
-    // NOTE: do NOT set `temperature` here — see src/extract/haiku.ts for
-    // why (API rejects it with a 400 for this model/endpoint; a prior
-    // attempt broke extraction entirely and was reverted).
-    system: [
-      {
-        type: 'text',
-        text: SONNET_SYSTEM_PROMPT,
-        cache_control: { type: 'ephemeral' },
-      },
-    ],
-    tools: [
-      {
-        name: 'emit_insights',
-        description: 'Emit verified, scored, and deduplicated insights',
-        input_schema: {
-          type: 'object' as const,
-          properties: {
-            insights: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  episodeId: { type: 'number' },
-                  category: {
-                    type: 'string',
-                    enum: [
-                      'architecture_decisions',
-                      'exploration',
-                      'mechanical_labor',
-                      'bug_fix',
-                      'ai_correction_load',
-                      'friction_audit',
-                      'high_potential_seeds',
-                    ],
+    // See haiku.ts for why this must be called directly, not via a detached
+    // function reference — casting the method strips its `this` binding.
+    // historyList moved to cached system block so identical history across
+    // batches in the same runExtraction call hits the cache (first batch pays
+    // cache-write price; subsequent batches pay cache-read price instead of
+    // full input-token price). Both system blocks are cache-controlled to
+    // ensure consistent caching behavior across the entire call.
+    const response = (await client.beta.promptCaching.messages.create({
+      model: 'claude-sonnet-5',
+      max_tokens: 16384,
+      // NOTE: do NOT set `temperature` here — see src/extract/haiku.ts for
+      // why (API rejects it with a 400 for this model/endpoint; a prior
+      // attempt broke extraction entirely and was reverted).
+      system: [
+        {
+          type: 'text',
+          text: SONNET_SYSTEM_PROMPT,
+          cache_control: { type: 'ephemeral' },
+        },
+        {
+          type: 'text',
+          text: `Recent history (last 5-7 days):\n${historyList}`,
+          cache_control: { type: 'ephemeral' },
+        },
+      ],
+      tools: [
+        {
+          name: 'emit_insights',
+          description: 'Emit verified, scored, and deduplicated insights',
+          input_schema: {
+            type: 'object' as const,
+            properties: {
+              insights: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    episodeId: { type: 'number' },
+                    category: {
+                      type: 'string',
+                      enum: [
+                        'architecture_decisions',
+                        'exploration',
+                        'mechanical_labor',
+                        'bug_fix',
+                        'ai_correction_load',
+                        'friction_audit',
+                        'high_potential_seeds',
+                      ],
+                    },
+                    text: { type: 'string' },
+                    evidenceRef: { type: 'string' },
+                    significanceScore: { type: 'number' },
+                    effortClass: {
+                      type: 'string',
+                      enum: ['toil', 'judgment', 'overhead'],
+                    },
+                    recurrenceOf: { type: ['number', 'null'] },
                   },
-                  text: { type: 'string' },
-                  evidenceRef: { type: 'string' },
-                  significanceScore: { type: 'number' },
-                  effortClass: {
-                    type: 'string',
-                    enum: ['toil', 'judgment', 'overhead'],
-                  },
-                  recurrenceOf: { type: ['number', 'null'] },
+                  required: [
+                    'episodeId',
+                    'category',
+                    'text',
+                    'evidenceRef',
+                    'significanceScore',
+                    'effortClass',
+                    'recurrenceOf',
+                  ],
                 },
-                required: [
-                  'episodeId',
-                  'category',
-                  'text',
-                  'evidenceRef',
-                  'significanceScore',
-                  'effortClass',
-                  'recurrenceOf',
-                ],
               },
             },
+            required: ['insights'],
           },
-          required: ['insights'],
         },
-      },
-    ],
-    tool_choice: { type: 'tool', name: 'emit_insights' },
-    messages: [
-      {
-        role: 'user',
-        content: userMessage,
-      },
-    ],
-  } as any)) as any;
+      ],
+      tool_choice: { type: 'tool', name: 'emit_insights' },
+      messages: [
+        {
+          role: 'user',
+          content: userMessage,
+        },
+      ],
+    } as any)) as any;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const toolUse = (response as any).content.find((block: any) => block.type === 'tool_use');
-  if (!toolUse || toolUse.type !== 'tool_use') {
-    throw new Error('No tool_use block in Sonnet response');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const toolUse = (response as any).content.find((block: any) => block.type === 'tool_use');
+    if (!toolUse || toolUse.type !== 'tool_use') {
+      throw new Error('No tool_use block in Sonnet response');
+    }
+
+    if (toolUse.name !== 'emit_insights') {
+      throw new Error(`Expected tool_use named emit_insights, got ${toolUse.name}`);
+    }
+
+    if (
+      typeof toolUse.input !== 'object' ||
+      toolUse.input === null ||
+      !('insights' in toolUse.input)
+    ) {
+      throw new Error(
+        `Tool input missing insights field (stop_reason: ${(response as any).stop_reason}) — ` +
+          'likely truncated by max_tokens if stop_reason is "max_tokens"',
+      );
+    }
+
+    const insights = toolUse.input.insights;
+    if (!Array.isArray(insights)) {
+      throw new Error(`Tool input insights must be an array, got ${typeof insights}`);
+    }
+
+    return insights.map((item: unknown) => {
+      const itemObj = item as Record<string, unknown>;
+      const insight: Insight = {
+        episodeId: itemObj.episodeId as number,
+        category: itemObj.category as Insight['category'],
+        text: itemObj.text as string,
+        evidenceRef: itemObj.evidenceRef as string,
+        significanceScore: itemObj.significanceScore as number,
+        effortClass: itemObj.effortClass as Insight['effortClass'],
+        verifiedByGit: null,
+        recurrenceOf: null,
+        createdAt: new Date().toISOString(),
+      };
+      return InsightSchema.parse(insight);
+    });
+  } catch (error) {
+    console.error(`Sonnet verify/score error for batch of ${candidatesWithSource.length}:`, error);
+    throw new SonnetVerificationError(candidatesWithSource.length, error);
   }
-
-  if (toolUse.name !== 'emit_insights') {
-    throw new Error(`Expected tool_use named emit_insights, got ${toolUse.name}`);
-  }
-
-  if (
-    typeof toolUse.input !== 'object' ||
-    toolUse.input === null ||
-    !('insights' in toolUse.input)
-  ) {
-    throw new Error(
-      `Tool input missing insights field (stop_reason: ${(response as any).stop_reason}) — ` +
-        'likely truncated by max_tokens if stop_reason is "max_tokens"',
-    );
-  }
-
-  const insights = toolUse.input.insights;
-  if (!Array.isArray(insights)) {
-    throw new Error(`Tool input insights must be an array, got ${typeof insights}`);
-  }
-
-  return insights.map((item: unknown) => {
-    const itemObj = item as Record<string, unknown>;
-    const insight: Insight = {
-      episodeId: itemObj.episodeId as number,
-      category: itemObj.category as Insight['category'],
-      text: itemObj.text as string,
-      evidenceRef: itemObj.evidenceRef as string,
-      significanceScore: itemObj.significanceScore as number,
-      effortClass: itemObj.effortClass as Insight['effortClass'],
-      verifiedByGit: null,
-      recurrenceOf: (itemObj.recurrenceOf as number | null) ?? null,
-      createdAt: new Date().toISOString(),
-    };
-    return InsightSchema.parse(insight);
-  });
 }
