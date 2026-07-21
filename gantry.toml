@@ -11,6 +11,7 @@ prompts_dir = ".gantry/prompts"
 runner = "claude-code"
 skip_permissions = true
 output_format = "json"
+max_concurrent = 2
 
 [models.plan]
 model = "claude-sonnet-5"
@@ -19,7 +20,7 @@ plan_mode = true
 
 [models.build]
 model = "claude-haiku-4-5"
-max_turns = 80
+max_turns = 150
 
 [models.evidence]
 model = "claude-sonnet-5"
