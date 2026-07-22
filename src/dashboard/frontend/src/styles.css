@@ -105,6 +105,39 @@ header .title-group p {
   margin-top: 2px;
 }
 
+.main-nav {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.nav-button {
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.nav-button:hover:not(.active) {
+  background: var(--surface-alt);
+  color: var(--text);
+  border-color: var(--text-faint);
+}
+
+.nav-button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
 .filter-bar {
   display: flex;
   align-items: center;
@@ -177,6 +210,72 @@ header .title-group p {
 .crumb-current {
   color: var(--text);
   font-weight: 600;
+}
+
+/* Date range selector (Engagement page) */
+.date-range-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.date-range-selector button {
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.date-range-selector button:hover:not(.active) {
+  background: var(--surface-alt);
+  color: var(--text);
+  border-color: var(--text-faint);
+}
+
+.date-range-selector button.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: transparent;
+}
+
+.custom-date-inputs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 4px;
+}
+
+.custom-date-inputs input[type='date'] {
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.8rem;
+}
+
+.custom-date-inputs input[type='date']:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.custom-date-inputs span {
+  color: var(--text-faint);
+}
+
+.chart-wrap {
+  max-width: 420px;
+  margin: 0 auto;
 }
 
 /* Page layout grid */
@@ -454,6 +553,24 @@ ul.insight-list.scrollable {
   flex-shrink: 0;
 }
 
+.section-action-row {
+  margin-bottom: 16px;
+}
+
+.expanded-run-panel {
+  padding: 0 4px 16px;
+}
+
+.select-narrow {
+  width: 150px;
+}
+
+.pagination-row {
+  justify-content: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
@@ -506,6 +623,21 @@ ul.insight-list.scrollable {
   border-color: transparent;
 }
 
+.brief-date-link {
+  border: none;
+  background: none;
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  padding: 0;
+}
+
+.brief-date-link:hover {
+  color: var(--accent);
+}
+
 .label-edit-btn {
   border: none;
   background: none;
@@ -538,6 +670,106 @@ ul.insight-list.scrollable {
   color: var(--text);
   cursor: pointer;
   padding: 2px 8px;
+}
+
+/* Flagged babysitting turns */
+ul.flagged-directives-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.flagged-directive-item {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 12px 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.flagged-directive-item:last-child {
+  border-bottom: none;
+}
+
+.flagged-directive-line {
+  flex-shrink: 0;
+  font-family: monospace;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 10px;
+  white-space: nowrap;
+}
+
+.flagged-directive-reason {
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+/* Flagged babysitting turns, grouped by theme */
+ul.flagged-theme-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.flagged-theme-item {
+  padding: 12px 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.flagged-theme-item:last-child {
+  border-bottom: none;
+}
+
+.flagged-theme-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.flagged-theme-label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.flagged-theme-more {
+  font-size: 0.78rem;
+  color: var(--text-faint);
+  margin-top: 6px;
+  padding-left: 4px;
+}
+
+/* Engagement summary */
+ul.engagement-summary-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.engagement-summary-list li {
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: var(--text);
+  padding-left: 18px;
+  position: relative;
+}
+
+.engagement-summary-list li::before {
+  content: '›';
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+  font-weight: 700;
 }
 
 /* Recurrence chains */
@@ -673,6 +905,77 @@ tbody tr:hover {
   font-size: 0.85rem;
   padding: 24px 4px;
   text-align: center;
+}
+
+/* Brief markdown rendering */
+.brief-paragraph {
+  margin-bottom: 12px;
+  font-size: 0.92rem;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.brief-blockquote {
+  border-left: 3px solid var(--accent);
+  padding-left: 14px;
+  color: var(--text-muted);
+  font-style: italic;
+  margin: 12px 0;
+}
+
+.brief-blockquote p {
+  margin: 0 0 4px;
+}
+
+.brief-code-block {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  padding: 14px 16px;
+  border-radius: 10px;
+  overflow: auto;
+  font-size: 0.82rem;
+  margin: 12px 0;
+}
+
+.brief-hr {
+  margin: 20px 0;
+  border: none;
+  border-top: 1px solid var(--border);
+}
+
+.card h1,
+.card h2,
+.card h3,
+.card h4,
+.card h5,
+.card h6 {
+  color: var(--text);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  margin: 20px 0 10px;
+}
+
+.card h1:first-child,
+.card h2:first-child,
+.card h3:first-child {
+  margin-top: 0;
+}
+
+.card ul,
+.card ol {
+  padding-left: 22px;
+  margin-bottom: 12px;
+  color: var(--text);
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+.card li {
+  margin-bottom: 4px;
+}
+
+.card a {
+  color: var(--accent);
 }
 
 .error-banner {

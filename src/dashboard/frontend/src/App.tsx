@@ -138,48 +138,26 @@ export function App() {
           <h1>Pensieve</h1>
           <p>Daily insight analytics</p>
         </div>
-        <nav style={{ display: 'flex', gap: '12px', marginTop: '12px' }}>
+        <nav className="main-nav">
           <button
+            className={`nav-button ${route.kind === 'holistic' ? 'active' : ''}`}
             onClick={() => setRoute({ kind: 'holistic' })}
-            style={{
-              padding: '6px 12px',
-              background: route.kind === 'holistic' ? '#007acc' : '#f0f0f0',
-              color: route.kind === 'holistic' ? 'white' : 'inherit',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-            }}
           >
             Engagement
           </button>
           <button
+            className={`nav-button ${
+              route.kind === 'projects' || route.kind === 'projects-detail' ? 'active' : ''
+            }`}
             onClick={() => setRoute({ kind: 'projects' })}
-            style={{
-              padding: '6px 12px',
-              background:
-                route.kind === 'projects' || route.kind === 'projects-detail'
-                  ? '#007acc'
-                  : '#f0f0f0',
-              color:
-                route.kind === 'projects' || route.kind === 'projects-detail' ? 'white' : 'inherit',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-            }}
           >
             Sessions
           </button>
           <button
+            className={`nav-button ${
+              route.kind === 'briefs' || route.kind === 'brief-detail' ? 'active' : ''
+            }`}
             onClick={() => setRoute({ kind: 'briefs' })}
-            style={{
-              padding: '6px 12px',
-              background:
-                route.kind === 'briefs' || route.kind === 'brief-detail' ? '#007acc' : '#f0f0f0',
-              color: route.kind === 'briefs' || route.kind === 'brief-detail' ? 'white' : 'inherit',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer',
-            }}
           >
             Briefs
           </button>

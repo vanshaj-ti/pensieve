@@ -6,6 +6,7 @@ import type {
   PaginatedSessions,
   SessionProject,
   EngagementBreakdown,
+  EngagementBreakdownTrendPoint,
   LabelSummary,
   ProjectSummary,
   SessionRun,
@@ -42,6 +43,12 @@ export const fetchEngagementBreakdown = (range: DateRange | string, filter: Anal
       ...filter,
     })}`,
     'engagement breakdown',
+  );
+
+export const fetchEngagementBreakdownTrend = (days: number, filter: AnalyticsFilter = {}) =>
+  fetchJson<EngagementBreakdownTrendPoint[]>(
+    `/api/engagement-breakdown-trend${buildQuery({ days, ...filter })}`,
+    'engagement breakdown trend',
   );
 
 export const fetchLabels = () => fetchJson<LabelSummary[]>('/api/labels', 'labels');

@@ -82,7 +82,7 @@ export function SessionDetailPage({ projectDir, sessionId, onNavigate }: Props) 
         <h2>
           {projectDir} <span className="card-hint">{sessionId}</span>
         </h2>
-        <div className="badge-row" style={{ marginBottom: 16 }}>
+        <div className="badge-row section-action-row">
           <button
             className="btn btn-primary"
             disabled={!!analyzing}
@@ -101,12 +101,16 @@ export function SessionDetailPage({ projectDir, sessionId, onNavigate }: Props) 
           <div className="empty-state">No analysis runs yet for this session.</div>
         ) : (
           <ul className="insight-list">
-            {runs.map((run) => {
+            {runs.map((run, idx) => {
               const isExpanded = expandedLabel === run.label;
               const derivingThis = isExpanded && deriving;
 
               return (
-                <li key={run.label}>
+                // run.label is not guaranteed unique (multiple runs can
+                // share a label, especially the empty/default label) —
+                // real bug found live via a React duplicate-key console
+                // error on a session with several same-labeled runs.
+                <li key={`${run.label}-${idx}`}>
                   <div className="session-row">
                     <div className="session-row-main">
                       <div className="badge-row">
@@ -139,8 +143,8 @@ export function SessionDetailPage({ projectDir, sessionId, onNavigate }: Props) 
                     </div>
                   </div>
                   {isExpanded && (
-                    <div style={{ padding: '0 4px 16px' }}>
-                      <div className="badge-row" style={{ marginBottom: 12 }}>
+                    <div className="expanded-run-panel">
+                      <div className="badge-row section-action-row">
                         <button
                           className="btn btn-primary"
                           disabled={!!derivingThis}

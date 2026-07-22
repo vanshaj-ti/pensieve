@@ -1,9 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Route } from '../hooks/useRoute';
-import type { AnalyticsFilter, DateRange, EngagementBreakdown } from '../types';
-import { fetchDates, fetchEngagementBreakdown } from '../api';
+import type {
+  AnalyticsFilter,
+  DateRange,
+  EngagementBreakdown,
+  EngagementBreakdownTrendPoint,
+} from '../types';
+import { fetchDates, fetchEngagementBreakdown, fetchEngagementBreakdownTrend } from '../api';
 import { EngagementStatStrip } from '../components/EngagementStatStrip';
+import { EngagementSummary } from '../components/EngagementSummary';
 import { EngagementBreakdownChart } from '../components/EngagementBreakdownChart';
+import { EngagementTrendChart } from '../components/EngagementTrendChart';
 import { FlaggedDirectivesList } from '../components/FlaggedDirectivesList';
 
 interface Props {
@@ -18,12 +25,15 @@ function shiftDate(iso: string, days: number): string {
   return d.toISOString().split('T')[0];
 }
 
+const TREND_DAYS = 30;
+
 export function EngagementPage({ filter, scopeLabel }: Props) {
   const [preset, setPreset] = useState<'today' | '7d' | '30d' | 'custom'>('today');
   const [customFrom, setCustomFrom] = useState<string>('');
   const [customTo, setCustomTo] = useState<string>('');
   const [dates, setDates] = useState<string[]>([]);
   const [breakdown, setBreakdown] = useState<EngagementBreakdown | null>(null);
+  const [trend, setTrend] = useState<EngagementBreakdownTrendPoint[]>([]);
   const [error, setError] = useState<string | null>(null);
   const reloadAbortRef = useRef<AbortController | null>(null);
 
@@ -84,6 +94,25 @@ export function EngagementPage({ filter, scopeLabel }: Props) {
     reload();
   }, [reload]);
 
+  // Trend always covers a fixed lookback window, independent of the
+  // preset/custom-range selector above — the whole point of a trend view
+  // is to show change over a stable window, not to shrink/grow with
+  // whatever single-point range the user is currently looking at.
+  useEffect(() => {
+    let cancelled = false;
+    fetchEngagementBreakdownTrend(TREND_DAYS, filter)
+      .then((res) => {
+        if (!cancelled) setTrend(res);
+      })
+      .catch(() => {
+        // Trend is additive polish, same as the old EffortTrendChart —
+        // a failure here shouldn't block the rest of the page.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [filterKey, filter]);
+
   useEffect(() => {
     return () => {
       reloadAbortRef.current?.abort();
@@ -96,18 +125,14 @@ export function EngagementPage({ filter, scopeLabel }: Props) {
 
   if (dates.length === 0) {
     return (
-      <div className="empty-state" style={{ gridColumn: '1 / -1' }}>
+      <div className="empty-state">
         No data yet for {scopeLabel} — run `pensieve analyze` first.
       </div>
     );
   }
 
   if (!breakdown) {
-    return (
-      <div className="loading-state" style={{ gridColumn: '1 / -1' }}>
-        Loading…
-      </div>
-    );
+    return <div className="loading-state">Loading…</div>;
   }
 
   return (
@@ -136,7 +161,20 @@ export function EngagementPage({ filter, scopeLabel }: Props) {
       <main className="analytics-grid">
         <EngagementStatStrip breakdown={breakdown} />
 
-        <section className="card">
+        <section className="card span-full">
+          <h2>Summary</h2>
+          <EngagementSummary breakdown={breakdown} />
+        </section>
+
+        <section className="card span-full">
+          <h2>
+            Trend
+            <span className="card-hint">last {TREND_DAYS} days</span>
+          </h2>
+          <EngagementTrendChart data={trend} />
+        </section>
+
+        <section className="card span-full">
           <h2>
             Engagement Breakdown
             <span className="card-hint">
@@ -149,7 +187,9 @@ export function EngagementPage({ filter, scopeLabel }: Props) {
                     : `${customFrom} – ${customTo}`}
             </span>
           </h2>
-          <EngagementBreakdownChart data={breakdown} />
+          <div className="chart-wrap">
+            <EngagementBreakdownChart data={breakdown} />
+          </div>
         </section>
 
         <section className="card span-full">

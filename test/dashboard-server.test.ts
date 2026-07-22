@@ -11,6 +11,7 @@ import {
   getInsightDates,
   getCrossProjectRollup,
   getEngagementBreakdown,
+  getEngagementBreakdownTrend,
   getLabels,
   getProjects,
   getSessions,
@@ -157,6 +158,24 @@ describe('dashboard server', () => {
     });
   });
 
+  describe('GET /api/engagement-breakdown-trend', () => {
+    it('returns engagement breakdown trend matching getEngagementBreakdownTrend', async () => {
+      const days = 30;
+      const res = await fetch(
+        `http://localhost:${port}/api/engagement-breakdown-trend?days=${days}`,
+      );
+      expect(res.status).toBe(200);
+      const apiData = await res.json();
+      const expected = getEngagementBreakdownTrend(dbForAnalytics, days);
+      expect(apiData).toEqual(expected);
+    });
+
+    it('returns 400 for non-numeric days', async () => {
+      const res = await fetch(`http://localhost:${port}/api/engagement-breakdown-trend?days=xyz`);
+      expect(res.status).toBe(400);
+    });
+  });
+
   describe('GET /api/cross-project', () => {
     it('returns cross-project rollup matching getCrossProjectRollup', async () => {
       const date = '2026-07-15';
@@ -182,12 +201,10 @@ describe('dashboard server', () => {
     });
   });
 
-  describe('static files', () => {
-    it('serves index.html from root', async () => {
+  describe('no static UI serving', () => {
+    it('returns 404 for the root path (API-only server, UI is served via `npm run dev:dashboard`)', async () => {
       const res = await fetch(`http://localhost:${port}/`);
-      expect(res.status).toBe(200);
-      const text = await res.text();
-      expect(text).toContain('Pensieve Dashboard');
+      expect(res.status).toBe(404);
     });
   });
 

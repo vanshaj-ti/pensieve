@@ -25,11 +25,7 @@ export function BriefsPage({ onNavigate }: Props) {
   }
 
   if (dates.length === 0) {
-    return (
-      <div className="empty-state" style={{ gridColumn: '1 / -1' }}>
-        No briefs found.
-      </div>
-    );
+    return <div className="empty-state">No briefs found.</div>;
   }
 
   return (
@@ -41,8 +37,7 @@ export function BriefsPage({ onNavigate }: Props) {
             <li className="session-row" key={date}>
               <div className="session-row-main">
                 <button
-                  className="label-edit-btn"
-                  style={{ fontSize: '0.9rem', textAlign: 'left' }}
+                  className="brief-date-link"
                   onClick={() => onNavigate({ kind: 'brief-detail', date })}
                 >
                   {date}

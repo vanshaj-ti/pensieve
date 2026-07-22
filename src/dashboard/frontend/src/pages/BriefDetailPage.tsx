@@ -89,20 +89,9 @@ export function renderMarkdown(text: string): React.ReactNode[] {
         i++;
       }
       elements.push(
-        <blockquote
-          key={elements.length}
-          style={{
-            borderLeft: '4px solid #ccc',
-            paddingLeft: '12px',
-            color: '#666',
-            fontStyle: 'italic',
-            margin: '8px 0',
-          }}
-        >
+        <blockquote key={elements.length} className="brief-blockquote">
           {quoteLines.map((q, idx) => (
-            <p key={idx} style={{ margin: '0' }}>
-              {renderInline(q)}
-            </p>
+            <p key={idx}>{renderInline(q)}</p>
           ))}
         </blockquote>,
       );
@@ -119,15 +108,7 @@ export function renderMarkdown(text: string): React.ReactNode[] {
       }
       if (i < lines.length) i++; // skip closing ```
       elements.push(
-        <pre
-          key={elements.length}
-          style={{
-            background: '#f5f5f5',
-            padding: '12px',
-            borderRadius: '4px',
-            overflow: 'auto',
-          }}
-        >
+        <pre key={elements.length} className="brief-code-block">
           <code>{codeLines.join('\n')}</code>
         </pre>,
       );
@@ -136,12 +117,7 @@ export function renderMarkdown(text: string): React.ReactNode[] {
 
     // Horizontal rule
     if (line.match(/^(---|___|\*\*\*)\s*$/)) {
-      elements.push(
-        <hr
-          key={elements.length}
-          style={{ margin: '16px 0', border: 'none', borderTop: '1px solid #ccc' }}
-        />,
-      );
+      elements.push(<hr key={elements.length} className="brief-hr" />);
       i++;
       continue;
     }
@@ -195,7 +171,7 @@ export function renderMarkdown(text: string): React.ReactNode[] {
         i++;
       }
       elements.push(
-        <p key={elements.length} style={{ marginBottom: '8px' }}>
+        <p key={elements.length} className="brief-paragraph">
           {renderInline(paragraphLines.join(' '))}
         </p>,
       );

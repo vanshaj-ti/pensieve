@@ -35,4 +35,27 @@ describe('FlaggedDirectivesList', () => {
       screen.getByText('told agent which file to edit instead of letting it search'),
     ).toBeInTheDocument();
   });
+
+  it('groups near-identical turns under one theme with a count instead of a flat dump', () => {
+    // Real user feedback: a session with several near-identical
+    // "manually ran tests" turns showed each one as a separate list item
+    // with the same text repeated ("why 3 of the same... I don't need to
+    // see these").
+    const flagged: FlaggedDirective[] = [
+      { humanLineNumber: 1, reason: 'manually ran tests', createdAt: '2026-07-15T00:00:00Z' },
+      { humanLineNumber: 2, reason: 'ran tests manually again', createdAt: '2026-07-15T00:00:00Z' },
+      {
+        humanLineNumber: 3,
+        reason: 'manually ran tests once more',
+        createdAt: '2026-07-15T00:00:00Z',
+      },
+    ];
+
+    render(<FlaggedDirectivesList flaggedDirectives={flagged} />);
+
+    expect(screen.getByText('3 turns')).toBeInTheDocument();
+    expect(
+      screen.getByText('Manually ran/wrote tests instead of letting the agent'),
+    ).toBeInTheDocument();
+  });
 });
