@@ -2,6 +2,7 @@ import type Database from 'better-sqlite3';
 import {
   buildFilterClause,
   buildDateClause,
+  localDateKey,
   type AnalyticsFilter,
   type DateRange,
 } from './shared.js';
@@ -126,4 +127,122 @@ export function getEngagementBreakdown(
     longestDirectiveBurst,
     flaggedDirectives: flaggedDirectives.slice(-FLAGGED_DIRECTIVE_LIMIT).reverse(),
   };
+}
+
+export interface EngagementBreakdownTrendPoint extends EngagementBreakdown {
+  date: string;
+}
+
+/**
+ * Per-day time series of the same metrics getEngagementBreakdown computes
+ * for a single range — mirrors getEffortBreakdownTrend's shape in
+ * effortBreakdown.ts (same days/filter signature, same localDateKey cutoff)
+ * so the dashboard can plot "is my babysitting ratio improving" over time,
+ * not just a single-range snapshot.
+ */
+export function getEngagementBreakdownTrend(
+  db: Database.Database,
+  days: number,
+  filter?: AnalyticsFilter,
+): EngagementBreakdownTrendPoint[] {
+  const cutoffMs = Date.now() - days * 86400000;
+  const cutoffDate = localDateKey(cutoffMs);
+  const { sql: filterSql, params: filterParams } = buildFilterClause(filter);
+
+  const rows = db
+    .prepare(
+      `
+    SELECT e.date, t.classification, t.directive_necessary, t.human_line_number, t.reason, t.created_at
+    FROM engagement_turns t
+    JOIN episodes e ON t.episode_id = e.id
+    WHERE e.date >= ?${filterSql}
+    ORDER BY e.date ASC, e.start_line ASC, t.human_line_number ASC
+  `,
+    )
+    .all(cutoffDate, ...filterParams) as Array<{
+    date: string;
+    classification: string;
+    directive_necessary: number | null;
+    human_line_number: number;
+    reason: string;
+    created_at: string;
+  }>;
+
+  interface DayAccum {
+    directiveNecessary: number;
+    directiveUnnecessary: number;
+    deliberative: number;
+    corrective: number;
+    acknowledgment: number;
+    currentBurst: number;
+    longestDirectiveBurst: number;
+    flaggedDirectives: FlaggedDirective[];
+  }
+
+  const byDate = new Map<string, DayAccum>();
+  const dateOrder: string[] = [];
+
+  for (const row of rows) {
+    if (!byDate.has(row.date)) {
+      byDate.set(row.date, {
+        directiveNecessary: 0,
+        directiveUnnecessary: 0,
+        deliberative: 0,
+        corrective: 0,
+        acknowledgment: 0,
+        currentBurst: 0,
+        longestDirectiveBurst: 0,
+        flaggedDirectives: [],
+      });
+      dateOrder.push(row.date);
+    }
+    const acc = byDate.get(row.date)!;
+
+    if (row.classification === 'directive') {
+      if (row.directive_necessary) {
+        acc.directiveNecessary++;
+        acc.currentBurst = 0;
+      } else {
+        acc.directiveUnnecessary++;
+        acc.currentBurst++;
+        acc.longestDirectiveBurst = Math.max(acc.longestDirectiveBurst, acc.currentBurst);
+        acc.flaggedDirectives.push({
+          humanLineNumber: row.human_line_number,
+          reason: row.reason,
+          createdAt: row.created_at,
+        });
+      }
+      continue;
+    }
+    acc.currentBurst = 0;
+    if (row.classification === 'deliberative') {
+      acc.deliberative++;
+    } else if (row.classification === 'corrective') {
+      acc.corrective++;
+    } else if (row.classification === 'acknowledgment') {
+      acc.acknowledgment++;
+    }
+  }
+
+  return dateOrder.map((date) => {
+    const acc = byDate.get(date)!;
+    const directive = acc.directiveNecessary + acc.directiveUnnecessary;
+    const total = directive + acc.deliberative + acc.corrective;
+    const goodEngagement = acc.deliberative + acc.corrective;
+
+    return {
+      date,
+      directive,
+      directiveNecessary: acc.directiveNecessary,
+      directiveUnnecessary: acc.directiveUnnecessary,
+      deliberative: acc.deliberative,
+      corrective: acc.corrective,
+      acknowledgment: acc.acknowledgment,
+      total,
+      engagementRatio:
+        acc.directiveUnnecessary > 0 ? goodEngagement / acc.directiveUnnecessary : null,
+      longestDirectiveBurst: acc.longestDirectiveBurst,
+      flaggedDirectives: acc.flaggedDirectives.slice(-FLAGGED_DIRECTIVE_LIMIT).reverse(),
+    };
+  });
 }

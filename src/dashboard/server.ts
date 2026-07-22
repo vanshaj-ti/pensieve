@@ -4,7 +4,6 @@ import http from 'http';
 import { statSync, readdirSync, readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import type Database from 'better-sqlite3';
-import { fileURLToPath } from 'url';
 import { Config } from '../config.js';
 import { openDb } from '../db/schema.js';
 import { createJob, updateJob, getJob, evictOldJobs, JOB_TTL_MS } from '../db/jobs.js';
@@ -14,6 +13,7 @@ import { deriveSessionInsights } from '../synthesis.js';
 import {
   getCrossProjectRollup,
   getEngagementBreakdown,
+  getEngagementBreakdownTrend,
   getInsightDates,
   getLabels,
   getProjects,
@@ -27,8 +27,6 @@ import {
   type AnalyticsFilter,
   type DateRange,
 } from '../analytics/index.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 function parseDate(value: string | undefined): string | null {
   if (!value) return null;
@@ -95,14 +93,7 @@ export function createDashboardServer(config: Config): Application {
   const db = openDb(config.dbPath);
   evictOldJobs(db, JOB_TTL_MS);
 
-  // Always resolves to the repo root's dist/dashboard/public, regardless of
-  // whether this file is running from src/dashboard (dev/test via tsx/vitest)
-  // or dist/dashboard (compiled) — both are two directories under repo root,
-  // and the Vite frontend only ever builds into dist/dashboard/public.
-  const publicDir = path.join(__dirname, '..', '..', 'dist', 'dashboard', 'public');
-
   app.use(express.json());
-  app.use(express.static(publicDir));
 
   app.get('/api/dates', (req: Request, res: Response) => {
     try {
@@ -142,6 +133,21 @@ export function createDashboardServer(config: Config): Application {
       res.json(breakdown);
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch engagement breakdown' });
+    }
+  });
+
+  app.get('/api/engagement-breakdown-trend', (req: Request, res: Response) => {
+    try {
+      const days = parsePositiveInt(req.query.days as string, 30);
+      if (days === null) {
+        return res
+          .status(400)
+          .json({ error: 'Invalid days parameter: must be a positive integer' });
+      }
+      const trend = getEngagementBreakdownTrend(db, days, parseFilter(req));
+      res.json(trend);
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch engagement breakdown trend' });
     }
   });
 
@@ -540,13 +546,6 @@ export function createDashboardServer(config: Config): Application {
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch brief' });
     }
-  });
-
-  // SPA fallback: any non-API GET (e.g. /sessions, /project/x) is a client-side
-  // route the React router owns, not a real server resource — serve the app
-  // shell and let it resolve the path. Must come after every /api/* route.
-  app.get(/^(?!\/api\/).*/, (req: Request, res: Response) => {
-    res.sendFile(path.join(publicDir, 'index.html'));
   });
 
   return app;

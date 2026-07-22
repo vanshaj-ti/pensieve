@@ -90,6 +90,10 @@ export interface EngagementBreakdown {
   flaggedDirectives: FlaggedDirective[];
 }
 
+export interface EngagementBreakdownTrendPoint extends EngagementBreakdown {
+  date: string;
+}
+
 export interface LabelSummary {
   label: string;
   count: number;

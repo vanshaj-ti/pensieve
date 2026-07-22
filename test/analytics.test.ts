@@ -11,6 +11,7 @@ import {
   getCrossProjectRollup,
   getProjectEffortBreakdown,
   getEffortBreakdown,
+  getEngagementBreakdownTrend,
   getLabels,
   getProjects,
   getSessions,
@@ -1293,6 +1294,93 @@ describe('analytics', () => {
     it('getDerivedInsights returns empty array when none exist', () => {
       const result = getDerivedInsights(db, '/tmp/project', 'session-1', 'run-a');
       expect(result).toEqual([]);
+    });
+  });
+
+  describe('getEngagementBreakdownTrend', () => {
+    // getEngagementBreakdownTrend's cutoff is relative to Date.now(), not a
+    // fixed date like the other tests in this file — using hardcoded past
+    // dates (e.g. '2026-07-15') would silently fall outside the trend
+    // window once that date is more than `days` in the past. Compute
+    // recent dates relative to today instead.
+    function daysAgo(n: number): string {
+      const d = new Date();
+      d.setDate(d.getDate() - n);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+
+    it('returns empty array for empty database', () => {
+      const result = getEngagementBreakdownTrend(db, 30);
+      expect(result).toEqual([]);
+    });
+
+    it('groups engagement turns by date, computing per-day ratio and burst independently', () => {
+      const day1 = daysAgo(2);
+      const day2 = daysAgo(1);
+
+      db.prepare(
+        `
+        INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
+        VALUES (?, '/tmp/project', 'session-1', 1, 10),
+               (?, '/tmp/project', 'session-1', 11, 20)
+      `,
+      ).run(day1, day2);
+
+      // Day 1 (episode_id=1): 1 deliberative, 2 unnecessary directives in a
+      // row (burst of 2). Day 2 (episode_id=2): 1 corrective, 1 necessary
+      // directive, 0 unnecessary (ratio should be null — nothing to divide
+      // by, matching getEngagementBreakdown's own null-when-no-babysitting
+      // convention).
+      db.prepare(
+        `
+        INSERT INTO engagement_turns (episode_id, human_line_number, classification, directive_necessary, reason, created_at)
+        VALUES (1, 1, 'deliberative', NULL, 'resolved a question', '2026-01-01T00:00:00Z'),
+               (1, 2, 'directive', 0, 'ran tests manually', '2026-01-01T00:00:00Z'),
+               (1, 3, 'directive', 0, 'told agent to clean up', '2026-01-01T00:00:00Z'),
+               (2, 4, 'corrective', NULL, 'caught a mistake', '2026-01-01T00:00:00Z'),
+               (2, 5, 'directive', 1, 'gated a deploy', '2026-01-01T00:00:00Z')
+      `,
+      ).run();
+
+      const result = getEngagementBreakdownTrend(db, 30);
+      expect(result).toHaveLength(2);
+
+      const [point1, point2] = result;
+      expect(point1.date).toBe(day1);
+      expect(point1.deliberative).toBe(1);
+      expect(point1.directiveUnnecessary).toBe(2);
+      expect(point1.longestDirectiveBurst).toBe(2);
+      expect(point1.engagementRatio).toBe(0.5); // 1 deliberative / 2 unnecessary
+
+      expect(point2.date).toBe(day2);
+      expect(point2.corrective).toBe(1);
+      expect(point2.directiveNecessary).toBe(1);
+      expect(point2.directiveUnnecessary).toBe(0);
+      expect(point2.engagementRatio).toBeNull();
+    });
+
+    it('excludes dates older than the cutoff window', () => {
+      const recentDate = daysAgo(1);
+      const oldDate = daysAgo(60);
+
+      db.prepare(
+        `
+        INSERT INTO episodes (date, project_dir, session_id, start_line, end_line)
+        VALUES (?, '/tmp/project', 'session-1', 1, 10),
+               (?, '/tmp/project', 'session-1', 11, 20)
+      `,
+      ).run(recentDate, oldDate);
+
+      db.prepare(
+        `
+        INSERT INTO engagement_turns (episode_id, human_line_number, classification, directive_necessary, reason, created_at)
+        VALUES (1, 1, 'deliberative', NULL, 'recent turn', '2026-01-01T00:00:00Z'),
+               (2, 2, 'deliberative', NULL, 'old turn', '2026-01-01T00:00:00Z')
+      `,
+      ).run();
+
+      const result = getEngagementBreakdownTrend(db, 30);
+      expect(result.map((p) => p.date)).toEqual([recentDate]);
     });
   });
 });

@@ -43,18 +43,12 @@ function ProjectList({ onSelect }: { onSelect: (projectDir: string) => void }) {
   }
 
   if (!projects) {
-    return (
-      <div className="loading-state" style={{ gridColumn: '1 / -1' }}>
-        Loading…
-      </div>
-    );
+    return <div className="loading-state">Loading…</div>;
   }
 
   if (projects.length === 0) {
     return (
-      <div className="empty-state" style={{ gridColumn: '1 / -1' }}>
-        No Claude Code sessions found under ~/.claude/projects/.
-      </div>
+      <div className="empty-state">No Claude Code sessions found under ~/.claude/projects/.</div>
     );
   }
 
@@ -66,11 +60,7 @@ function ProjectList({ onSelect }: { onSelect: (projectDir: string) => void }) {
           {projects.map((p) => (
             <li className="session-row" key={p.projectDir}>
               <div className="session-row-main">
-                <button
-                  className="label-edit-btn"
-                  style={{ fontSize: '0.9rem', textAlign: 'left' }}
-                  onClick={() => onSelect(p.projectDir)}
-                >
+                <button className="brief-date-link" onClick={() => onSelect(p.projectDir)}>
                   {p.cwd || p.projectDir}
                 </button>
               </div>
@@ -179,8 +169,7 @@ function ProjectSessions({
             Sort by status{sortIndicator('analyzed')}
           </button>
           <select
-            className="search-box"
-            style={{ width: 150 }}
+            className="search-box select-narrow"
             value={analyzedFilter}
             onChange={(e) => setAnalyzedFilter(e.target.value as AnalyzedFilter)}
           >
@@ -267,7 +256,7 @@ function ProjectSessions({
                             sessionId: s.sessionId,
                           }}
                         >
-                          Analytics
+                          Engagement
                         </RouteLink>
                       </>
                     )}
@@ -279,7 +268,7 @@ function ProjectSessions({
         )}
 
         {totalPages > 1 && (
-          <div className="badge-row" style={{ justifyContent: 'center', gap: 12, marginTop: 16 }}>
+          <div className="badge-row pagination-row">
             <button className="btn" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
               ← Prev
             </button>

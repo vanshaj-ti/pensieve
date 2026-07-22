@@ -164,7 +164,9 @@ program
 
 program
   .command('dashboard')
-  .description('Start a local web dashboard for browsing analytics.')
+  .description(
+    'Start the dashboard API server (view the UI separately via `npm run dev:dashboard`).',
+  )
   .option('--port <number>', 'Port to listen on', '4200')
   .option('--db <path>', 'Override the database path')
   .action((opts: { port: string; db?: string }) => {
@@ -177,7 +179,9 @@ program
         return;
       }
       startDashboardServer(config, port);
-      console.log(`Dashboard running at http://localhost:${port}`);
+      console.log(
+        `Dashboard API running at http://localhost:${port} — run \`npm run dev:dashboard\` to view the UI.`,
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`Error: ${message}`);
